@@ -5,6 +5,7 @@ use std::{
 };
 
 use anyhow::{anyhow, Result};
+use dats::formats::zone_data::zone_model::ZoneModel;
 use processor::{dat_descriptor::DatDescriptor, processor::DatProcessorMessage};
 use tracing_subscriber::fmt::MakeWriter;
 
@@ -65,6 +66,26 @@ pub async fn get_zones_for_type(
         .ok_or(anyhow!("No DAT context."))?;
 
     Ok(dat_query::get_zone_ids_for_type(dat_descriptor, dat_context).await)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn get_zone_model(
+    dat_descriptor: DatDescriptor,
+    state: AppState<'_>,
+) -> Result<Option<ZoneModel>, AppError> {
+    let dat_context = state
+        .read()
+        .dat_context
+        .clone()
+        .ok_or(anyhow!("No DAT context."))?;
+
+    let zone_model = dat_query::get_zone_model(dat_descriptor, dat_context).await;
+    match &zone_model {
+        Some(model) => eprintln!("Grid offset: {}", model.grid_offset),
+        None => eprintln!("NO MODEL FOUND!"),
+    }
+    Ok(zone_model)
 }
 
 #[tauri::command]

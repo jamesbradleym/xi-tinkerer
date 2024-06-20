@@ -163,7 +163,7 @@ impl DatFormat for ZoneData {
     }
 
     fn check_type<T: ByteWalker>(_walker: &mut T) -> Result<()> {
-        Err(anyhow!("Can't check type"))
+        Ok(())
     }
 }
 

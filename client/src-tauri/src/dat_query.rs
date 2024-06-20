@@ -5,6 +5,7 @@ use dats::{
     base::{DatByZone, ZoneId},
     context::DatContext,
     dat_format::DatFormat,
+    formats::zone_data::{collision_mesh::CollisionMesh, zone_model::ZoneModel},
     id_mapping::DatIdMapping,
 };
 use processor::dat_descriptor::DatDescriptor;
@@ -86,6 +87,30 @@ pub struct ZoneInfo {
     name: String,
 }
 
+#[derive(Serialize)]
+pub struct ZoneData {
+    info: ZoneInfo,
+    collision_mesh: CollisionMesh,
+}
+
+pub async fn get_zone_model(
+    dat_descriptor: DatDescriptor,
+    dat_context: Arc<DatContext>,
+) -> Option<ZoneModel> {
+    match dat_descriptor {
+        DatDescriptor::ZoneData(zone_id) => {
+            let zone_data_dat = DatIdMapping::get().zone_data.get(&zone_id)?;
+
+            let zone_data = dat_context.get_data_from_dat(zone_data_dat).ok()?;
+
+            let zone_model = ZoneModel::parse_from_zone_data(&zone_data.dat).ok()?;
+
+            Some(zone_model)
+        }
+        _ => None,
+    }
+}
+
 async fn get_zone_ids_from_dats<T: DatFormat + 'static>(
     dat_by_zone: &DatByZone<T>,
     dat_context: Arc<DatContext>,
@@ -102,15 +127,14 @@ async fn get_zone_ids_from_dats<T: DatFormat + 'static>(
                 let zone_name = dat_context
                     .zone_id_to_name
                     .get(&zone_id)
-                    .ok_or(anyhow!("No zone name for ID."))?;
+                    .ok_or(anyhow!("No zone name for ID: {zone_id}."))?;
 
-                if dat_context.check_dat(&dat_id).is_ok() {
-                    Ok::<_, AppError>(ZoneInfo {
+                match dat_context.check_dat(&dat_id) {
+                    Ok(_) => Ok::<_, AppError>(ZoneInfo {
                         id: zone_id.clone(),
                         name: zone_name.display_name.clone(),
-                    })
-                } else {
-                    Err(anyhow!("DAT did not match type."))?
+                    }),
+                    Err(err) => Err(err.into()),
                 }
             }))
         })
@@ -120,7 +144,13 @@ async fn get_zone_ids_from_dats<T: DatFormat + 'static>(
         .await
         .into_iter()
         .flatten()
-        .filter_map(|res| res.ok())
+        .filter_map(|res| match res {
+            Ok(res) => Some(res),
+            Err(err) => {
+                eprintln!("Failed to load DAT: {err}");
+                None
+            }
+        })
         .collect()
 }
 
@@ -129,6 +159,9 @@ pub async fn get_zone_ids_for_type(
     dat_context: Arc<DatContext>,
 ) -> Vec<ZoneInfo> {
     match dat_descriptor {
+        DatDescriptor::ZoneData(_) => {
+            get_zone_ids_from_dats(&DatIdMapping::get().zone_data, dat_context).await
+        }
         DatDescriptor::EntityNames(_) => {
             get_zone_ids_from_dats(&DatIdMapping::get().entities, dat_context).await
         }

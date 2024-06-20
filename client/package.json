@@ -14,12 +14,17 @@
     "@solidjs/router": "^0.8.2",
     "@tauri-apps/api": "^2.0.0-beta.13",
     "@tauri-apps/plugin-dialog": "2.0.0-beta.5",
+    "camera-controls": "^2.8.5",
     "fuse.js": "^6.6.2",
+    "hold-event": "^1.1.0",
     "solid-icons": "^1.0.11",
-    "solid-js": "^1.7.8"
+    "solid-js": "^1.7.8",
+    "solid-three": "^0.2.0",
+    "three": "^0.165.0"
   },
   "devDependencies": {
     "@tauri-apps/cli": "2.0.0-beta.20",
+    "@types/three": "^0.165.0",
     "autoprefixer": "^10.4.14",
     "postcss": "^8.4.27",
     "tailwindcss": "^3.3.3",
