@@ -409,7 +409,7 @@ impl DatFormat for MenuTable {
 
 #[cfg(test)]
 mod tests {
-    use std::{fs::File, io::BufWriter, path::PathBuf};
+    use std::path::PathBuf;
 
     use crate::dat_format::DatFormat;
 
@@ -421,9 +421,6 @@ mod tests {
         dat_path.push("resources/test/menu.DAT");
 
         MenuTable::check_path(&dat_path).unwrap();
-        let res = MenuTable::from_path_checked(&dat_path).unwrap();
-
-        let file = File::create("menu.yml").unwrap();
-        serde_yaml::to_writer(BufWriter::new(file), &res).unwrap();
+        MenuTable::from_path_checked(&dat_path).unwrap();
     }
 }
