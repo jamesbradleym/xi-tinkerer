@@ -1,4 +1,5 @@
 pub mod collision_mesh;
+pub mod zone_mmb;
 pub mod zone_model;
 
 use anyhow::{anyhow, Result};
@@ -7,54 +8,38 @@ use common::{
 };
 use encoding::chunk_key_tables::KEY_TABLE_1;
 use serde_derive::{Deserialize, Serialize};
+use zone_mmb::ZoneMmb;
+use zone_model::ZoneCollisionMesh;
 
 use crate::{dat_format::DatFormat, serde_hex};
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct ZoneData {
     pub chunks: Vec<Chunk>,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct Chunk {
     pub four_char_code: String,
     pub chunk_type: u8,
     pub unknown_0x08: u32,
     pub unknown_0x12: u32,
-    #[serde(with = "serde_hex")]
-    pub data: Vec<u8>,
+    pub data: ChunkData,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type")]
 pub enum ChunkData {
-    _05 {
+    ZoneMmb {
+        zone_mmb: ZoneMmb,
+    },
+    ZoneModel {
+        zone_model: ZoneCollisionMesh,
+    },
+    Unknown {
         #[serde(with = "serde_hex")]
         data: Vec<u8>,
     },
-    _1B {
-        #[serde(with = "serde_hex")]
-        data: Vec<u8>,
-    },
-    _FFFF {
-        #[serde(with = "serde_hex")]
-        data: Vec<u8>,
-    },
-    Plain {
-        #[serde(with = "serde_hex")]
-        data: Vec<u8>,
-    },
-}
-
-impl ChunkData {
-    pub fn get_data(&self) -> &[u8] {
-        match self {
-            ChunkData::_05 { data } => data,
-            ChunkData::_1B { data } => data,
-            ChunkData::_FFFF { data } => data,
-            ChunkData::Plain { data } => data,
-        }
-    }
 }
 
 impl ZoneData {
@@ -81,7 +66,7 @@ impl Chunk {
         let chunk_type = (type_and_length & 0x7F) as u8;
         let length = ((type_and_length >> 7) << 4) - 0x10;
 
-        let data = ChunkData::parse(walker, length)?;
+        let data = ChunkData::parse(walker, chunk_type, length)?;
 
         Ok(Chunk {
             four_char_code,
@@ -94,32 +79,52 @@ impl Chunk {
 }
 
 impl ChunkData {
-    pub fn parse<T: ByteWalker>(walker: &mut T, length: u32) -> Result<Vec<u8>> {
+    pub fn parse<T: ByteWalker>(walker: &mut T, chunk_type: u8, length: u32) -> Result<ChunkData> {
         let data = walker.take_bytes(length as usize)?;
 
-        let chunk_data = if length < 8 {
-            data.into()
-        } else if data[3] == 0x05 {
-            // TODO: decrypt
-            data.into()
-        } else if data[3] == 0x1B {
-            Self::decrypt_1b(data.to_vec())?
-        } else if data[6] == 0xFF && data[7] == 0xFF {
-            // TODO: decrypt
-            data.into()
-        } else {
-            // TODO: unknown
-            data.into()
-        };
+        if length < 8 {
+            return Ok(ChunkData::Unknown { data: data.into() });
+        }
 
-        Ok(chunk_data)
+        match chunk_type {
+            // MZB
+            0x1C => {
+                let decoded = Self::decode_1b(data.to_vec())?;
+                let zone_model = ZoneCollisionMesh::parse(&mut VecByteWalker::on(decoded))?;
+                Ok(ChunkData::ZoneModel { zone_model })
+            }
+
+            // MMB
+            0x2E => {
+                let decoded = Self::decode_05(data.to_vec())?;
+                let decoded = Self::decode_ffff(decoded)?;
+                ZoneMmb::parse(&mut VecByteWalker::on(decoded))
+                    .map(|zone_mmb| {
+                        ChunkData::ZoneMmb { zone_mmb }
+                })
+                    .or_else(|_err| Ok(ChunkData::Unknown { data: data.into() }))
+            }
+
+            // Notes from other projects:
+            0x20 | // IMG
+            0x29 | // Bone
+            0x2B | // Animation
+            0x2A | // Vertex
+
+            _ => Ok(ChunkData::Unknown { data: data.into() }),
+        }
     }
 
-    fn decrypt_1b(data: Vec<u8>) -> Result<Vec<u8>> {
+    fn decode_1b(data: Vec<u8>) -> Result<Vec<u8>> {
+        if data[3] != 0x1B {
+            return Ok(data);
+        }
+
         let mut walker = VecByteWalker::on(data);
         let len = walker.read_at::<u32>(0)? & 0xFFFFFF;
 
         let index = walker.read_at::<u8>(7)? ^ 0xFF;
+
         let mut key = KEY_TABLE_1[index as usize] as usize;
 
         let mut key_counter = 0;
@@ -151,6 +156,64 @@ impl ChunkData {
 
         Ok(walker.into_vec())
     }
+
+    fn decode_05(data: Vec<u8>) -> Result<Vec<u8>> {
+        if data[3] != 0x05 {
+            return Ok(data);
+        }
+
+        let mut walker = VecByteWalker::on(data);
+        let len = walker.read_at::<u32>(0)? & 0xFFFFFF;
+
+        let index = walker.read_at::<u8>(5)? ^ 0xF0;
+        let mut key = KEY_TABLE_1[index as usize] as usize;
+
+        let mut key_counter = 0;
+        for pos in 8..len {
+            let x = (key << 8) | key;
+            key_counter += 1;
+            key += key_counter;
+
+            let new_value = walker.read_at::<u8>(pos as usize)? ^ ((x >> (key & 0x7)) as u8);
+            walker.write_at::<u8>(pos as usize, new_value);
+
+            key_counter += 1;
+            key += key_counter;
+            key &= 0xFF;
+        }
+
+        Ok(walker.into_vec())
+    }
+
+    fn decode_ffff(data: Vec<u8>) -> Result<Vec<u8>> {
+        if data[6] == 0xFF && data[7] == 0xFF {
+            return Ok(data);
+        }
+
+        let mut walker = VecByteWalker::on(data);
+        let len = walker.read_at::<u32>(0)? & 0xFFFFFF;
+
+        let mut key1 = (walker.read_at::<u8>(5)? ^ 0xF0) as usize;
+        let mut key2 = KEY_TABLE_1[key1 as usize] as usize;
+
+        let decode_count = ((len - 8) & (!0xFu32)) / 2;
+
+        let mut offset1: usize = 8;
+        let mut offset2: usize = offset1 + decode_count as usize;
+
+        for _ in (0..decode_count).step_by(8) {
+            if (key2 & 1) == 1 {
+                walker.swap_8_bytes(offset1, offset2);
+            }
+
+            key1 += 9;
+            key2 += key1;
+            offset1 += 8;
+            offset2 += 8;
+        }
+
+        Ok(walker.into_vec())
+    }
 }
 
 impl DatFormat for ZoneData {
@@ -169,7 +232,7 @@ impl DatFormat for ZoneData {
 
 #[cfg(test)]
 mod tests {
-    use std::{fs::File, io::BufWriter, path::PathBuf};
+    use std::path::PathBuf;
 
     use crate::dat_format::DatFormat;
 
@@ -181,9 +244,9 @@ mod tests {
         dat_path.push("resources/test/zone_data_Pashhow_Marshlands.DAT");
 
         ZoneData::check_path(&dat_path).unwrap();
-        let res = ZoneData::from_path(&dat_path).unwrap();
+        let _res = ZoneData::from_path(&dat_path).unwrap();
 
-        let file = File::create("Pashhow_Marshlands.yml").unwrap();
-        serde_yaml::to_writer(BufWriter::new(file), &res).unwrap();
+        // let file = File::create("Pashhow_Marshlands.yml").unwrap();
+        // serde_yaml::to_writer(BufWriter::new(file), &res).unwrap();
     }
 }

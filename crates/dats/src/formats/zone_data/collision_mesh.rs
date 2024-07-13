@@ -3,14 +3,14 @@ use serde::{Deserialize, Serialize};
 
 use anyhow::Result;
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 pub struct Point3D {
     pub x: f32,
     pub y: f32,
     pub z: f32,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 pub struct TriangleInfo {
     pub vertex1_idx: u32,
     pub vertex2_idx: u32,
@@ -18,18 +18,18 @@ pub struct TriangleInfo {
     pub normal_idx: u32,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct CollisionMesh {
     pub grid_entries: Vec<GridMeshEntry>,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct GridMeshEntry {
     pub info_entry: u32,
     pub mesh_entries: Vec<MeshEntry>,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct MeshEntry {
     pub flags: u16,
     pub vertices: Vec<Point3D>,

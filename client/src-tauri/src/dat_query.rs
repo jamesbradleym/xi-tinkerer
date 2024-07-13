@@ -5,7 +5,7 @@ use dats::{
     base::{DatByZone, ZoneId},
     context::DatContext,
     dat_format::DatFormat,
-    formats::zone_data::{collision_mesh::CollisionMesh, zone_model::ZoneModel},
+    formats::zone_data::{collision_mesh::CollisionMesh, zone_model::ZoneCollisionMesh},
     id_mapping::DatIdMapping,
 };
 use processor::dat_descriptor::DatDescriptor;
@@ -96,16 +96,16 @@ pub struct ZoneData {
 pub async fn get_zone_model(
     dat_descriptor: DatDescriptor,
     dat_context: Arc<DatContext>,
-) -> Option<ZoneModel> {
+) -> Option<ZoneCollisionMesh> {
     match dat_descriptor {
         DatDescriptor::ZoneData(zone_id) => {
             let zone_data_dat = DatIdMapping::get().zone_data.get(&zone_id)?;
 
             let zone_data = dat_context.get_data_from_dat(zone_data_dat).ok()?;
 
-            let zone_model = ZoneModel::parse_from_zone_data(&zone_data.dat).ok()?;
+            let zone_model = ZoneCollisionMesh::parse_from_zone_data(&zone_data.dat).ok()?;
 
-            Some(zone_model)
+            Some(zone_model.clone())
         }
         _ => None,
     }

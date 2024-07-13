@@ -5,7 +5,7 @@ use std::{
 };
 
 use anyhow::{anyhow, Result};
-use dats::formats::zone_data::zone_model::ZoneModel;
+use dats::formats::zone_data::zone_model::ZoneCollisionMesh;
 use processor::{dat_descriptor::DatDescriptor, processor::DatProcessorMessage};
 use tracing_subscriber::fmt::MakeWriter;
 
@@ -73,7 +73,7 @@ pub async fn get_zones_for_type(
 pub async fn get_zone_model(
     dat_descriptor: DatDescriptor,
     state: AppState<'_>,
-) -> Result<Option<ZoneModel>, AppError> {
+) -> Result<Option<ZoneCollisionMesh>, AppError> {
     let dat_context = state
         .read()
         .dat_context

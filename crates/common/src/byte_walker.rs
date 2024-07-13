@@ -235,7 +235,6 @@ where
     fn read_bytes_at(&mut self, offset: usize, amount: usize) -> Result<&[u8]> {
         let end_offset = offset + amount;
         if end_offset > self.data.as_ref().len() {
-            debug_assert!(false, "Out of range");
             return Err(ByteWalkerError::OutOfRange {
                 buffer_length: self.data.as_ref().len(),
                 requested_index: end_offset,

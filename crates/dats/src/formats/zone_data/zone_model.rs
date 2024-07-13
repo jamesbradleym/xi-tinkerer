@@ -1,17 +1,17 @@
 use anyhow::{anyhow, Result};
-use common::{byte_walker::ByteWalker, slice_byte_walker::SliceByteWalker};
+use common::byte_walker::ByteWalker;
 use serde_derive::{Deserialize, Serialize};
 
 use crate::serde_hex;
 
-use super::{collision_mesh::CollisionMesh, ZoneData};
+use super::{collision_mesh::CollisionMesh, ChunkData, ZoneData};
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
-pub struct ZoneModel {
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ZoneCollisionMesh {
     pub data_len: u32,
 
-    pub unknown_0x00: u32,
-    pub unknown_0x04: u32,
+    pub len_and_type: u32,
+    pub node_count_and_unk: u32,
     pub mesh_offset: u32,
 
     pub grid_width: u16,
@@ -37,30 +37,24 @@ pub struct ZoneModel {
     pub collision_mesh: CollisionMesh,
 }
 
-impl ZoneModel {
-    pub fn parse_from_zone_data(zone_data: &ZoneData) -> Result<ZoneModel> {
-        let model_chunk_data = zone_data
+impl ZoneCollisionMesh {
+    pub fn parse_from_zone_data(zone_data: &ZoneData) -> Result<&ZoneCollisionMesh> {
+        zone_data
             .chunks
             .iter()
-            .find_map(|chunk| {
-                if chunk.chunk_type == 0x1C {
-                    Some(&chunk.data)
-                } else {
-                    None
-                }
+            .find_map(|chunk| match &chunk.data {
+                ChunkData::ZoneModel { zone_model } => Some(zone_model),
+                _ => None,
             })
-            .ok_or_else(|| anyhow!("Did not find zone model in zone data."))?;
-
-        let mut walker = SliceByteWalker::new(model_chunk_data);
-        Self::parse(&mut walker)
+            .ok_or_else(|| anyhow!("No zone model found in zone data."))
     }
 
-    pub fn parse<T: ByteWalker>(walker: &mut T) -> Result<ZoneModel> {
+    pub fn parse<T: ByteWalker>(walker: &mut T) -> Result<ZoneCollisionMesh> {
         let data_len = walker.len() as u32;
 
-        let unknown_0x00 = walker.step::<u32>()?;
-        let unknown_0x04 = walker.step::<u32>()?;
-        let mesh_offset = walker.step::<u32>()?;
+        let len_and_type = walker.step::<u32>()?; // 0x00
+        let node_count_and_unk = walker.step::<u32>()?; // 0x04
+        let mesh_offset = walker.step::<u32>()?; // 0x08
 
         if data_len <= mesh_offset {
             return Err(anyhow!(
@@ -68,20 +62,21 @@ impl ZoneModel {
             ));
         }
 
-        let grid_width = walker.step::<u8>()? as u16 * 10;
-        let grid_height = walker.step::<u8>()? as u16 * 10;
-        let bucket_width = walker.step::<u8>()?;
-        let bucket_height = walker.step::<u8>()?;
+        let grid_width = walker.step::<u8>()? as u16 * 10; // 0x0C
+        let grid_height = walker.step::<u8>()? as u16 * 10; // 0x0D
+        let bucket_width = walker.step::<u8>()?; // 0x0E
+        let bucket_height = walker.step::<u8>()?; // 0x0F
 
-        let quadtree_offset = walker.step::<u32>()?;
+        let quadtree_offset = walker.step::<u32>()?; // 0x10
 
         let objects_start_offset = 0x20;
-        let objects_end_offset = walker.step::<u32>()?;
-        let _objects_count = (objects_end_offset - objects_start_offset) / 0x64;
+        let objects_end_offset = walker.step::<u32>()?; // 0x14
+        let _objects_count = (objects_end_offset.saturating_sub(objects_start_offset)) / 0x64;
 
-        let shortname_offset = walker.step::<u32>()?;
-        let _shortname_count = (mesh_offset - shortname_offset) / 0x4C;
+        let shortname_offset = walker.step::<u32>()?; // 0x18
+        let _shortname_count = (mesh_offset.saturating_sub(shortname_offset)) / 0x4C;
 
+        // 0x1C
         let unknown_data = walker
             .take_bytes(mesh_offset as usize - walker.offset())?
             .to_vec();
@@ -100,11 +95,11 @@ impl ZoneModel {
 
         let collision_mesh = CollisionMesh::parse(walker, grid_offset, grid_height, grid_width)?;
 
-        Ok(ZoneModel {
+        Ok(ZoneCollisionMesh {
             data_len,
 
-            unknown_0x00,
-            unknown_0x04,
+            len_and_type,
+            node_count_and_unk,
             mesh_offset,
 
             grid_width,
@@ -133,27 +128,27 @@ impl ZoneModel {
 
 #[cfg(test)]
 mod tests {
-    use std::{fs::File, io::BufWriter, path::PathBuf};
+    use std::path::PathBuf;
 
     use crate::{dat_format::DatFormat, formats::zone_data::ZoneData};
 
-    use super::ZoneModel;
+    use super::ZoneCollisionMesh;
 
     #[test]
     pub fn zone_model() {
         let resources_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
 
-        let names = ["Pashhow_Marshlands", "Yughott_Grotto"];
+        let names: [&str; 2] = ["Pashhow_Marshlands", "Yughott_Grotto"];
 
         for name in names {
             let mut path = resources_path.clone();
             path.push(format!("resources/test/zone_data_{name}.DAT"));
 
             let data = ZoneData::from_path(&path).unwrap();
-            let res = ZoneModel::parse_from_zone_data(&data).unwrap();
+            let _res = ZoneCollisionMesh::parse_from_zone_data(&data).unwrap();
 
-            let file = File::create(format!("{name}.yml")).unwrap();
-            serde_yaml::to_writer(BufWriter::new(file), &res).unwrap();
+            // let file = File::create(format!("{name}.yml")).unwrap();
+            // serde_yaml::to_writer(BufWriter::new(file), &res).unwrap();
         }
     }
 }
