@@ -138,6 +138,9 @@ pub async fn get_zone_ids_for_type(
         DatDescriptor::Dialog2(_) => {
             get_zone_ids_from_dats(&DatIdMapping::get().dialog2, dat_context).await
         }
+        DatDescriptor::Event(_) => {
+            get_zone_ids_from_dats(&DatIdMapping::get().event, dat_context).await
+        }
         _ => {
             vec![]
         }

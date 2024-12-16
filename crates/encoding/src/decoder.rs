@@ -35,6 +35,10 @@ impl<'a> Decoder<'a> {
         Self::decode(bytes, false)
     }
 
+    pub fn decode_event(bytes: &[u8]) -> Result<String> {
+        Self::decode(bytes, false)
+    }
+
     pub(crate) fn decode(bytes: &[u8], is_simple: bool) -> Result<String> {
         if bytes.is_empty() {
             return Ok("".to_string());

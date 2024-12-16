@@ -48,6 +48,11 @@ const navItems: NavItem[] = [
     path: "/dialog2",
     icon: <HiSolidChatBubbleLeftRight />,
   },
+  {
+    name: "Event",
+    path: "/event",
+    icon: <HiSolidChatBubbleLeftRight />,
+  },
 
   { header: "Other" },
   {
@@ -173,6 +178,19 @@ function App() {
                     columns={[{ name: "Name", key: "name" }, { name: "ID", key: "id" }]}
                     defaultSortColumn="name"
                     toDatDescriptor={(zone) => ({ type: "Dialog2", index: zone.id })}
+                  />
+                )}
+              ></Route>
+
+              <Route
+                path="/event"
+                component={() => (
+                  <DatTable
+                    title="Event"
+                    rowsResourceFetcher={async () => unwrap(await commands.getZonesForType({ type: "Event", index: 0 }))}
+                    columns={[{ name: "Name", key: "name" }, { name: "ID", key: "id" }]}
+                    defaultSortColumn="name"
+                    toDatDescriptor={(zone) => ({ type: "Event", index: zone.id })}
                   />
                 )}
               ></Route>

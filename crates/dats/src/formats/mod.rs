@@ -1,4 +1,5 @@
 pub mod dialog;
+pub mod event;
 pub mod dmsg;
 pub mod dmsg1_string_table;
 pub mod dmsg2_string_table;

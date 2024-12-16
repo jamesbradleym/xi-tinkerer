@@ -3,7 +3,7 @@ use std::sync::OnceLock;
 use crate::{
     base::{Dat, DatByZone},
     formats::{
-        dialog::Dialog, dmsg2_string_table::Dmsg2StringTable, dmsg3_string_table::Dmsg3StringTable,
+        dialog::Dialog, event::Event, dmsg2_string_table::Dmsg2StringTable, dmsg3_string_table::Dmsg3StringTable,
         entity_names::EntityNames, item_info::ItemInfoTable, menu_table::MenuTable,
         status_info::StatusInfoTable, xistring_table::XiStringTable,
     },
@@ -14,6 +14,7 @@ pub struct DatIdMapping {
     pub entities: DatByZone<EntityNames>,
     pub dialog: DatByZone<Dialog>,
     pub dialog2: DatByZone<Dialog>,
+    pub event: DatByZone<Event>,
 
     // Global dialog
     pub monster_skill_names: Dat<Dialog>,
@@ -81,7 +82,7 @@ impl DatIdMapping {
         DAT_ID_MAPPING.get_or_init(|| {
             // Entities
             let mut entities = DatByZone::default();
-            // Zones 1-255
+            // Zones 0-255
             (0..256).into_iter().for_each(|idx| {
                 entities.insert(idx, 6720 + idx);
             });
@@ -110,10 +111,18 @@ impl DatIdMapping {
             // Just whitegate?
             dialog2.insert(50, 57945);
 
+            // Event
+            let mut event = DatByZone::default();
+            // Zones 0-255
+            (0..256).into_iter().for_each(|idx| {
+                event.insert(idx, 5820 + idx);
+            });
+
             Self {
                 entities,
                 dialog,
                 dialog2,
+                event,
 
                 // Global dialog
                 monster_skill_names: 07035.into(),

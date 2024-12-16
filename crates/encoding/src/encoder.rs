@@ -34,6 +34,10 @@ impl<'a> Encoder<'a> {
         Self::encode(string, false)
     }
 
+    pub fn encode_event(string: &'a str) -> Result<Vec<u8>> {
+        Self::encode(string, false)
+    }
+
     pub(crate) fn encode(string: &'a str, is_simple: bool) -> Result<Vec<u8>> {
         let mut encoder = Encoder::new(string);
         if is_simple {
