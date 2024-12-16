@@ -129,7 +129,7 @@ impl DatIdMapping {
 
             // Entities
             let mut entities = DatByZone::default();
-            // Zones 1-255
+            // Zones 0-255
             (0..256).into_iter().for_each(|idx| {
                 entities.insert(idx, 6720 + idx);
             });
