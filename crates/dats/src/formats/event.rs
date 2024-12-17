@@ -1,5 +1,13 @@
+/// Implementation based on ideas and guidance from atom0s
+/// Source: https://github.com/atom0s/XiEvents/blob/main/Event%20DAT%20Structures.md
+/// Credits to atom0s for valuable references and insights.
+
+use std::fmt;
+
 use anyhow::{anyhow, Result};
-use serde_derive::{Deserialize, Serialize};
+use serde::de::{Deserializer, Error as DeError, SeqAccess, Visitor};
+use serde::ser::{SerializeSeq, Serializer};
+use serde::{Deserialize, Serialize};
 
 use common::{byte_walker::ByteWalker, writing_byte_walker::WritingByteWalker};
 use crate::dat_format::DatFormat;
@@ -22,9 +30,26 @@ pub struct EventBlock {
     pub event_exec_nums: Vec<u16>, // IDs for each event in this block.
     pub immed_count: u32,         // Number of immediate data entries.
     pub immed_data: Vec<u32>,     // Immediate data table (e.g., references to item IDs, string IDs, etc.).
-    pub event_data_size: u32,     // Size of the raw event bytecode data.
-    pub event_data: Vec<u8>,      // Raw event bytecode data (4-byte aligned).
+    pub event_opcodes: Vec<EventOpcode>, // Parsed opcodes from event_data
 }
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct EventOpcode {
+    #[serde(
+        serialize_with = "serialize_u8_as_hex",
+        deserialize_with = "deserialize_u8_from_hex"
+    )]
+    pub opcode: u8, // Serialize/Deserialize the opcode as a hex string
+
+    #[serde(
+        serialize_with = "serialize_vec_u8_as_hex",
+        deserialize_with = "deserialize_vec_u8_from_hex"
+    )]
+    pub params: Vec<u8>, // Serialize/Deserialize params as a list of hex strings
+}
+
+const INVALID_OPCODE: u8 = 0xFF; // Use 0xFF to clearly indicate an invalid or empty opcode
+const VALID_OPCODE_RANGE: std::ops::RangeInclusive<u8> = 0x00..=0xD9;
 
 /// Represents the entire event file.
 /// Combines the header and all blocks into one structure.
@@ -118,13 +143,13 @@ impl EventBlock {
             return Err(anyhow!("Invalid EventDataSize: {}", event_data_size));
         }
 
-        // Read EventData
-        let mut event_data = walker.take_bytes(event_data_size as usize)?.to_vec();
+        // Read EventData as opcodes
+        // TODO: Add info on what these codes are doing for parsed yaml
+        let event_opcodes = Self::parse_opcodes(walker, &tag_offsets, event_data_size, walker.offset())?;
 
         // Align EventData to a 4-byte boundary
-        let padding = (4 - (event_data.len() % 4)) % 4;
+        let padding = (4 - (event_data_size as usize % 4)) % 4;
         if padding > 0 {
-            event_data.resize(event_data.len() + padding, 0xFF); // Add padding bytes
             walker.skip(padding);
         }
 
@@ -135,9 +160,99 @@ impl EventBlock {
             event_exec_nums,
             immed_count,
             immed_data,
-            event_data_size,
-            event_data,
+            event_opcodes,
         })
+    }
+
+    fn parse_opcodes(walker: &mut impl ByteWalker, offsets: &[u16], event_data_size: u32, event_data_start: usize) -> Result<Vec<EventOpcode>> {
+        let mut opcodes = Vec::new();
+
+        for (i, &relative_offset) in offsets.iter().enumerate() {
+            let start_offset = event_data_start + relative_offset as usize; // Absolute start position
+
+            let end_offset = if i + 1 < offsets.len() {
+                event_data_start + offsets[i + 1] as usize
+            } else {
+                event_data_start + event_data_size as usize
+            };
+
+            if start_offset == end_offset {
+                opcodes.push(EventOpcode {
+                    opcode: INVALID_OPCODE,
+                    params: Vec::new(),
+                });
+                continue;
+            }
+
+            if start_offset > end_offset {
+                return Err(anyhow!(
+                    "Invalid opcode boundaries: start=0x{:04X}, end=0x{:04X}",
+                    start_offset,
+                    end_offset
+                ));
+            }
+
+            // Seek to the starting offset if necessary
+            if walker.offset() != start_offset {
+                walker.goto_usize(start_offset);
+            }
+
+            // Read the opcode (1 byte) directly
+            let opcode = walker.step::<u8>()?;
+
+            // Calculate parameters length and read them
+            let params_length = end_offset - start_offset - 1; // Subtract opcode size (1 byte)
+            let params = walker.take_bytes(params_length)?.to_vec();
+
+            opcodes.push(EventOpcode {
+                opcode,
+                params,
+            });
+        }
+
+        Ok(opcodes)
+    }
+
+    fn calculate_event_data_size(&self) -> u32 {
+        self.event_opcodes
+            .iter()
+            .filter(|opcode| !opcode.is_empty()) // Skip empty entries for event data size calc
+            .map(|opcode| 1 + opcode.params.len() as u32) // 1 byte for opcode + params size
+            .sum()
+    }
+
+    /// Write Event Data and return the padded size.
+    fn write_event_data<T: WritingByteWalker>(&self, walker: &mut T) -> Result<()> {
+        for opcode in &self.event_opcodes {
+            if opcode.is_empty() {
+                continue;
+            }
+
+            walker.write(opcode.opcode); // Write the opcode
+            walker.write_bytes(&opcode.params); // Write parameters
+        }
+
+        // Align to 4-byte boundary
+        let total_size = self.calculate_event_data_size();
+        let padding = (4 - (total_size as usize % 4)) % 4;
+
+        if padding > 0 {
+            walker.write_bytes(&vec![0xFF; padding]); // Write padding
+        }
+
+        Ok(())
+    }
+}
+
+impl EventOpcode {
+    /// Determine if the opcode is valid (within the defined range).
+    pub fn is_valid(&self) -> bool {
+        VALID_OPCODE_RANGE.contains(&self.opcode)
+    }
+
+    /// Check if the opcode is empty (invalid and has no parameters).
+    pub fn is_empty(&self) -> bool {
+        self.opcode == INVALID_OPCODE && self.params.is_empty()
     }
 }
 
@@ -159,37 +274,34 @@ impl Event {
 
     /// Write the event structure back to binary format.
     pub fn write<T: WritingByteWalker>(&self, walker: &mut T) -> Result<()> {
-        // Write the header
         walker.write(self.header.block_count);
-        for (_i, size) in self.header.block_sizes.iter().enumerate() {
+        for size in &self.header.block_sizes {
             walker.write(*size);
         }
 
-        // Write each block
-        for (_i, block) in self.blocks.iter().enumerate() {
+        for block in &self.blocks {
             walker.write(block.actor_number);
+
             walker.write(block.tag_count);
 
-            // Validate tag count before writing
-            if block.tag_count == 0 || block.tag_count > 1024 {
-                return Err(anyhow!("Invalid tag count: {}", block.tag_count));
-            }
-
-            for (_j, offset) in block.tag_offsets.iter().enumerate() {
+            for offset in &block.tag_offsets {
                 walker.write(*offset);
             }
 
-            for (_j, exec_num) in block.event_exec_nums.iter().enumerate() {
+            for exec_num in &block.event_exec_nums {
                 walker.write(*exec_num);
             }
 
             walker.write(block.immed_count);
-            for (_j, immed) in block.immed_data.iter().enumerate() {
+
+            for immed in &block.immed_data {
                 walker.write(*immed);
             }
 
-            walker.write(block.event_data_size);
-            walker.write_bytes(&block.event_data);
+            let event_data_size = block.calculate_event_data_size();
+            walker.write(event_data_size);
+
+            block.write_event_data(walker)?;
         }
 
         Ok(())
@@ -209,6 +321,72 @@ impl DatFormat for Event {
         EventHeader::get_header_values(walker)?;
         Ok(())
     }
+}
+
+/// Serialize a u8 as a hexadecimal string
+pub fn serialize_u8_as_hex<S>(value: &u8, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    serializer.serialize_str(&format!("0x{:02X}", value))
+}
+
+/// Deserialize a hexadecimal string into a u8
+pub fn deserialize_u8_from_hex<'de, D>(deserializer: D) -> Result<u8, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?; // Deserialize into a string
+    u8::from_str_radix(s.trim_start_matches("0x"), 16)
+        .map_err(|e| DeError::custom(format!("Invalid hex string: {} ({})", s, e)))
+}
+
+/// Serialize a Vec<u8> as an array of hexadecimal strings
+pub fn serialize_vec_u8_as_hex<S>(values: &Vec<u8>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    // Start a sequence serializer
+    let mut seq = serializer.serialize_seq(Some(values.len()))?;
+
+    // Format each byte as a hex string and serialize it
+    for value in values {
+        seq.serialize_element(&format!("0x{:02X}", value))?;
+    }
+
+    // End the sequence serialization
+    seq.end()
+}
+
+/// Deserialize an array of hexadecimal strings into a Vec<u8>
+pub fn deserialize_vec_u8_from_hex<'de, D>(deserializer: D) -> Result<Vec<u8>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    struct HexVecVisitor;
+
+    impl<'de> Visitor<'de> for HexVecVisitor {
+        type Value = Vec<u8>;
+
+        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+            formatter.write_str("an array of hexadecimal strings like ['0x01', '0x80']")
+        }
+
+        fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+        where
+            A: SeqAccess<'de>,
+        {
+            let mut values = Vec::new();
+            while let Some(hex_str) = seq.next_element::<String>()? {
+                let value = u8::from_str_radix(hex_str.trim_start_matches("0x"), 16)
+                    .map_err(|e| DeError::custom(format!("Invalid hex string: {} ({})", hex_str, e)))?;
+                values.push(value);
+            }
+            Ok(values)
+        }
+    }
+
+    deserializer.deserialize_seq(HexVecVisitor)
 }
 
 #[cfg(test)]
