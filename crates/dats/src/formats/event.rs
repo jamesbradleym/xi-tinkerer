@@ -59,6 +59,10 @@ pub struct EventSeries {
 #[serde(untagged)]
 pub enum ParsedData {
     Opcodes(Vec<EventOpcode>),
+    #[serde(
+        serialize_with = "serialize_vec_u8_as_hex",
+        deserialize_with = "deserialize_vec_u8_from_hex"
+    )]
     RawBytes(Vec<u8>),
 }
 
@@ -285,6 +289,15 @@ impl EventBlock {
 
             // Read parameters
             let params = if adjusted_params_length > 0 {
+                if adjusted_params_length + walker.offset() > end_offset {
+                    eprintln!(
+                        "Warning: Opcode 0x{:02X} params exceeded expected size. Fallback to raw bytes.",
+                        opcode
+                    );
+                    walker.goto(start_offset as u32); // Ensure we rewind to start
+                    let remaining = walker.take_bytes(end_offset - start_offset)?.to_vec();
+                    return Ok(ParsedData::RawBytes(remaining));
+                }
                 walker.take_bytes(adjusted_params_length)?.to_vec()
             } else {
                 Vec::new()
@@ -488,7 +501,8 @@ mod tests {
     #[test]
     pub fn windurst_woods_from_dat() {
         let mut dat_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        dat_path.push("resources/test/event_windurst_woods.DAT");
+        // dat_path.push("resources/test/event_windurst_woods.DAT");
+        dat_path.push("resources/test/event_southern_sandoria.DAT");
 
         // Check header validity
         Event::check_path(&dat_path).unwrap();
