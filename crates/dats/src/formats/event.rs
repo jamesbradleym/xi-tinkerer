@@ -1,7 +1,9 @@
 /// Implementation based on ideas and guidance from atom0s
 /// Source: https://github.com/atom0s/XiEvents/blob/main/Event%20DAT%20Structures.md
 /// Credits to atom0s for valuable references and insights.
+///
 
+use std::collections::HashMap;
 use std::fmt;
 
 use anyhow::{anyhow, Result};
@@ -11,6 +13,10 @@ use serde::{Deserialize, Serialize};
 
 use common::{byte_walker::ByteWalker, writing_byte_walker::WritingByteWalker};
 use crate::dat_format::DatFormat;
+use crate::formats::opcode_descriptions::DESCRIPTIONS;
+
+const INVALID_OPCODE: u8 = 0xFF; // Use 0xFF to clearly indicate an invalid or empty opcode
+const VALID_OPCODE_RANGE: std::ops::RangeInclusive<u8> = 0x00..=0xD9;
 
 /// Represents the header of the event file.
 /// Contains metadata about the blocks, including the number of blocks and their sizes.
@@ -18,6 +24,14 @@ use crate::dat_format::DatFormat;
 pub struct EventHeader {
     pub block_count: u32,        // Number of event blocks in the file.
     pub block_sizes: Vec<u32>,   // Sizes of each block in bytes.
+}
+
+/// Represents the entire event file.
+/// Combines the header and all blocks into one structure.
+#[derive(Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct Event {
+    pub header: EventHeader,       // The header containing block metadata.
+    pub blocks: Vec<EventBlock>,   // A list of all event blocks in the file.
 }
 
 /// Represents a single event block.
@@ -30,37 +44,53 @@ pub struct EventBlock {
     pub event_exec_nums: Vec<u16>, // IDs for each event in this block.
     pub immed_count: u32,         // Number of immediate data entries.
     pub immed_data: Vec<u32>,     // Immediate data table (e.g., references to item IDs, string IDs, etc.).
-    pub event_opcodes: Vec<EventOpcode>, // Parsed opcodes from event_data
+    pub event_series: Vec<EventSeries>, // Parsed opcodes from event_data
 }
 
+/// Represents a series of events.
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct EventSeries {
+    pub id: u16,
+    pub parsed_data: ParsedData,
+}
+
+/// Represents the parsed data within an event series.
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(untagged)]
+pub enum ParsedData {
+    Opcodes(Vec<EventOpcode>),
+    RawBytes(Vec<u8>),
+}
+
+/// Represents an individual opcode within an event series.
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct EventOpcode {
     #[serde(
         serialize_with = "serialize_u8_as_hex",
         deserialize_with = "deserialize_u8_from_hex"
     )]
-    pub opcode: u8, // Serialize/Deserialize the opcode as a hex string
-
+    pub opcode: u8,
     #[serde(
         serialize_with = "serialize_vec_u8_as_hex",
         deserialize_with = "deserialize_vec_u8_from_hex"
     )]
-    pub params: Vec<u8>, // Serialize/Deserialize params as a list of hex strings
+    pub params: Vec<u8>,
+    pub description: Option<String>,
+    pub url: Option<String>,
 }
 
-const INVALID_OPCODE: u8 = 0xFF; // Use 0xFF to clearly indicate an invalid or empty opcode
-const VALID_OPCODE_RANGE: std::ops::RangeInclusive<u8> = 0x00..=0xD9;
-
-/// Represents the entire event file.
-/// Combines the header and all blocks into one structure.
-#[derive(Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
-pub struct Event {
-    pub header: EventHeader,       // The header containing block metadata.
-    pub blocks: Vec<EventBlock>,   // A list of all event blocks in the file.
+/// Represents metadata for an opcode.
+#[derive(Debug)]
+pub struct OpcodeMetadata {
+    pub description: &'static str, // Static string for descriptions
+    pub url: String,               // URL for documentation
+    pub sizes: Vec<usize>,         // Sizes for opcode parameters
+    pub callback: Option<OpcodeSizeCallback>,   // Optional callback for dynamic size determination
 }
+
+pub type OpcodeSizeCallback = fn(opcode: u8, data: &[u8], previous_opcodes: &[EventOpcode]) -> Option<usize>;
 
 impl EventHeader {
-
     fn get_header_values<T: ByteWalker>(walker: &mut T) -> Result<(u32, Vec<u32>)> {
         let block_count = walker.step::<u32>()?;
 
@@ -76,25 +106,15 @@ impl EventHeader {
         Ok((block_count, block_sizes))
     }
 
-    /// Parse the event header from the binary data.
     pub fn parse<T: ByteWalker>(walker: &mut T) -> Result<Self> {
-
-        // Read BlockCount
-        let block_count = walker.step::<u32>()?; // Ensure correct endianness
-
+        let block_count = walker.step::<u32>()?;
         if block_count == 0 || block_count > 1024 {
             return Err(anyhow!("Invalid BlockCount: {}", block_count));
         }
 
-        // Read BlockSizes
-        let mut block_sizes = Vec::new();
-        for i in 0..block_count {
-            let size = walker.step::<u32>()?;
-            if size == 0 {
-                return Err(anyhow!("Invalid block size (0) at index {}", i));
-            }
-            block_sizes.push(size);
-        }
+        let block_sizes: Vec<u32> = (0..block_count)
+            .map(|_| walker.step::<u32>())
+            .collect::<Result<Vec<_>>>()?;
 
         Ok(Self {
             block_count,
@@ -104,50 +124,26 @@ impl EventHeader {
 }
 
 impl EventBlock {
-    /// Parse a single event block from the binary data.
     pub fn parse<T: ByteWalker>(walker: &mut T) -> Result<Self> {
-        // ActorNumber
         let actor_number = walker.step::<u32>()?;
-
-        // TagCount
         let tag_count = walker.step::<u32>()?;
-
-        // TagOffsets
-        let mut tag_offsets = Vec::new();
-        for _i in 0..tag_count {
-            let offset = walker.step::<u16>()?;
-            tag_offsets.push(offset);
-        }
-
-        // EventExecNums
-        let mut event_exec_nums = Vec::new();
-        for _i in 0..tag_count {
-            let exec_num = walker.step::<u16>()?;
-            event_exec_nums.push(exec_num);
-        }
-
-        // ImmedCount
+        let tag_offsets: Vec<u16> = (0..tag_count)
+            .map(|_| walker.step::<u16>())
+            .collect::<Result<Vec<_>>>()?;
+        let event_exec_nums: Vec<u16> = (0..tag_count)
+            .map(|_| walker.step::<u16>())
+            .collect::<Result<Vec<_>>>()?;
         let immed_count = walker.step::<u32>()?;
-
-        // ImmedData
-        let mut immed_data = Vec::new();
-        for _i in 0..immed_count {
-            let data = walker.step::<u32>()?;
-            immed_data.push(data);
-        }
-
-        // EventDataSize
+        let immed_data: Vec<u32> = (0..immed_count)
+            .map(|_| walker.step::<u32>())
+            .collect::<Result<Vec<_>>>()?;
         let event_data_size = walker.step::<u32>()?;
-
         if event_data_size == 0 || event_data_size > walker.remaining() as u32 {
             return Err(anyhow!("Invalid EventDataSize: {}", event_data_size));
         }
 
-        // Read EventData as opcodes
-        // TODO: Add info on what these codes are doing for parsed yaml
-        let event_opcodes = Self::parse_opcodes(walker, &tag_offsets, event_data_size, walker.offset())?;
+        let event_series = Self::parse_series(walker, &tag_offsets, &event_exec_nums, event_data_size, walker.offset())?;
 
-        // Align EventData to a 4-byte boundary
         let padding = (4 - (event_data_size as usize % 4)) % 4;
         if padding > 0 {
             walker.skip(padding);
@@ -160,26 +156,28 @@ impl EventBlock {
             event_exec_nums,
             immed_count,
             immed_data,
-            event_opcodes,
+            event_series,
         })
     }
 
-    fn parse_opcodes(walker: &mut impl ByteWalker, offsets: &[u16], event_data_size: u32, event_data_start: usize) -> Result<Vec<EventOpcode>> {
-        let mut opcodes = Vec::new();
+    fn parse_series(walker: &mut impl ByteWalker, offsets: &[u16], event_exec_nums: &[u16], event_data_size: u32, event_data_start: usize) -> Result<Vec<EventSeries>> {
+        let mut series_list = Vec::new();
+        let offset_len = offsets.len();
 
-        for (i, &relative_offset) in offsets.iter().enumerate() {
-            let start_offset = event_data_start + relative_offset as usize; // Absolute start position
+        for (i, &_relative_offset) in offsets.iter().enumerate() {
+            let start_offset = walker.offset(); // Absolute start position
 
-            let end_offset = if i + 1 < offsets.len() {
+            let end_offset = if i + 1 < offset_len {
                 event_data_start + offsets[i + 1] as usize
             } else {
                 event_data_start + event_data_size as usize
             };
 
-            if start_offset == end_offset {
-                opcodes.push(EventOpcode {
-                    opcode: INVALID_OPCODE,
-                    params: Vec::new(),
+            // Handle empty or invalid offsets
+            if start_offset >= end_offset {
+                series_list.push(EventSeries {
+                    id: event_exec_nums[i],
+                    parsed_data: ParsedData::RawBytes(Vec::new()),
                 });
                 continue;
             }
@@ -192,120 +190,213 @@ impl EventBlock {
                 ));
             }
 
-            // Seek to the starting offset if necessary
-            if walker.offset() != start_offset {
-                walker.goto_usize(start_offset);
+            // Parse opcodes within the series and group them together
+            match Self::parse_opcodes(walker, end_offset)? {
+                ParsedData::Opcodes(opcodes) => series_list.push(EventSeries {
+                    id: event_exec_nums[i],
+                    parsed_data: ParsedData::Opcodes(opcodes),
+                }),
+                ParsedData::RawBytes(bytes) => series_list.push(EventSeries {
+                    id: event_exec_nums[i],
+                    parsed_data: ParsedData::RawBytes(bytes),
+                }),
+            }
+        }
+
+        Ok(series_list)
+    }
+
+    fn parse_opcodes(walker: &mut impl ByteWalker, end_offset: usize) -> Result<ParsedData> {
+        let mut opcodes = Vec::new();
+        let start_offset = walker.offset();
+
+        while walker.offset() < end_offset {
+            // Read the opcode (1 byte)
+            let opcode = walker.step::<u8>()?;
+            if opcode == INVALID_OPCODE || walker.offset() > end_offset {
+                // Bad opcode found
+                eprintln!(
+                    "Warning: No metadata available for opcode 0x{:02X}. Fallback to raw bytes.",
+                    opcode
+                );
+                walker.goto(start_offset as u32);
+                let remaining = walker.take_bytes(end_offset - start_offset)?.to_vec();
+                return Ok(ParsedData::RawBytes(remaining));
             }
 
-            // Read the opcode (1 byte) directly
-            let opcode = walker.step::<u8>()?;
+            // Retrieve opcode metadata
+            let metadata_map = opcode_metadata();
+            let metadata = metadata_map.get(&opcode);
 
-            // Calculate parameters length and read them
-            let params_length = end_offset - start_offset - 1; // Subtract opcode size (1 byte)
-            let params = walker.take_bytes(params_length)?.to_vec();
+            let description = metadata.map(|meta| meta.description.to_string());
+            let url = metadata.map(|meta| meta.url.clone());
 
+            // Determine parameter length
+            let params_length = if let Some(meta) = metadata {
+                if meta.sizes.len() == 1 {
+                    // Single size
+                    meta.sizes[0]
+                } else if let Some(callback) = meta.callback {
+                    // Use the callback
+                    match callback(
+                        opcode,
+                        walker.read_bytes_at(walker.offset(), end_offset - walker.offset()).unwrap_or_default(),
+                        &opcodes,
+                    ) {
+                        Some(size) => size,
+                        None => {
+                            eprintln!(
+                                "Warning: Failed to determine size dynamically for opcode 0x{:02X}. Fallback to raw bytes.",
+                                opcode
+                            );
+                            walker.goto(start_offset as u32);
+                            let remaining = walker.take_bytes(end_offset - start_offset)?.to_vec();
+                            return Ok(ParsedData::RawBytes(remaining));
+                        }
+                    }
+                } else {
+                    // Multiple sizes without callback
+                    eprintln!(
+                        "Warning: Opcode 0x{:02X} has multiple sizes, but no callback. Fallback to raw bytes.",
+                        opcode
+                    );
+                    walker.goto(start_offset as u32); // Ensure we rewind to start
+                    let remaining = walker.take_bytes(end_offset - start_offset)?.to_vec();
+                    return Ok(ParsedData::RawBytes(remaining));
+                }
+            } else {
+                // No metadata
+                eprintln!(
+                    "Warning: No metadata available for opcode 0x{:02X}. Fallback to raw bytes.",
+                    opcode
+                );
+
+                walker.goto(start_offset as u32); // Ensure we rewind to start
+                let remaining = walker.take_bytes(end_offset - start_offset)?.to_vec();
+                return Ok(ParsedData::RawBytes(remaining));
+            };
+
+            // Adjust parameter length to exclude the opcode byte
+            let adjusted_params_length = if params_length > 0 {
+                params_length.saturating_sub(1) // Subtract 1 for the opcode
+            } else {
+                0
+            };
+
+            // Read parameters
+            let params = if adjusted_params_length > 0 {
+                walker.take_bytes(adjusted_params_length)?.to_vec()
+            } else {
+                Vec::new()
+            };
+
+            // Add the opcode to the list
             opcodes.push(EventOpcode {
                 opcode,
                 params,
+                description,
+                url,
             });
         }
 
-        Ok(opcodes)
+        Ok(ParsedData::Opcodes(opcodes))
+    }
+
+    pub fn write_to_walker<T: WritingByteWalker>(&self, walker: &mut T) -> Result<()> {
+        walker.write(self.actor_number);
+        walker.write(self.tag_count);
+        for offset in &self.tag_offsets {
+            walker.write(*offset);
+        }
+        for exec_num in &self.event_exec_nums {
+            walker.write(*exec_num);
+        }
+        walker.write(self.immed_count);
+        for immed in &self.immed_data {
+            walker.write(*immed);
+        }
+
+        let event_data_size = self.calculate_event_data_size();
+        walker.write(event_data_size);
+
+        self.write_event_data(walker, event_data_size)
     }
 
     fn calculate_event_data_size(&self) -> u32 {
-        self.event_opcodes
+        self.event_series
             .iter()
-            .filter(|opcode| !opcode.is_empty()) // Skip empty entries for event data size calc
-            .map(|opcode| 1 + opcode.params.len() as u32) // 1 byte for opcode + params size
-            .sum()
+            .map(|series| match &series.parsed_data {
+                ParsedData::Opcodes(opcodes) => {
+                    opcodes.iter().map(|opcode| 1 + opcode.params.len() as u32).sum::<u32>()
+                }
+                ParsedData::RawBytes(bytes) => bytes.len() as u32,
+            })
+            .sum::<u32>()
     }
 
-    /// Write Event Data and return the padded size.
-    fn write_event_data<T: WritingByteWalker>(&self, walker: &mut T) -> Result<()> {
-        for opcode in &self.event_opcodes {
-            if opcode.is_empty() {
-                continue;
+    /// Write Event Data.
+    fn write_event_data<T: WritingByteWalker>(&self, walker: &mut T, event_data_size: u32) -> Result<()> {
+        for (i, series) in self.event_series.iter().enumerate() {
+            match &series.parsed_data {
+                ParsedData::Opcodes(opcodes) => {
+                    for opcode in opcodes {
+                        walker.write(opcode.opcode); // Write the opcode
+                        walker.write_bytes(&opcode.params); // Write parameters
+                    }
+                }
+                ParsedData::RawBytes(bytes) => {
+                    walker.write_bytes(bytes); // Write raw bytes directly
+                }
             }
-
-            walker.write(opcode.opcode); // Write the opcode
-            walker.write_bytes(&opcode.params); // Write parameters
         }
 
-        // Align to 4-byte boundary
-        let total_size = self.calculate_event_data_size();
-        let padding = (4 - (total_size as usize % 4)) % 4;
-
+        // Align to a 4-byte boundary
+        let padding = (4 - (event_data_size % 4)) % 4;
         if padding > 0 {
-            walker.write_bytes(&vec![0xFF; padding]); // Write padding
+            walker.write_bytes(&vec![0xFF; padding as usize]);
         }
 
         Ok(())
     }
 }
 
-impl EventOpcode {
-    /// Determine if the opcode is valid (within the defined range).
-    pub fn is_valid(&self) -> bool {
-        VALID_OPCODE_RANGE.contains(&self.opcode)
-    }
-
-    /// Check if the opcode is empty (invalid and has no parameters).
-    pub fn is_empty(&self) -> bool {
-        self.opcode == INVALID_OPCODE && self.params.is_empty()
-    }
-}
-
 impl Event {
-    /// Parse the entire event file from binary data.
     pub fn parse<T: ByteWalker>(walker: &mut T) -> Result<Self> {
-        // Parse the header
         let header = EventHeader::parse(walker)?;
-
-        // Parse the blocks
-        let mut blocks = Vec::new();
-        for _i in 0..header.block_count {
-            let block = EventBlock::parse(walker)?;
-            blocks.push(block);
-        }
+        let blocks = (0..header.block_count)
+            .map(|_| EventBlock::parse(walker))
+            .collect::<Result<Vec<_>>>()?;
 
         Ok(Self { header, blocks })
     }
 
-    /// Write the event structure back to binary format.
     pub fn write<T: WritingByteWalker>(&self, walker: &mut T) -> Result<()> {
         walker.write(self.header.block_count);
         for size in &self.header.block_sizes {
             walker.write(*size);
         }
-
         for block in &self.blocks {
-            walker.write(block.actor_number);
-
-            walker.write(block.tag_count);
-
-            for offset in &block.tag_offsets {
-                walker.write(*offset);
-            }
-
-            for exec_num in &block.event_exec_nums {
-                walker.write(*exec_num);
-            }
-
-            walker.write(block.immed_count);
-
-            for immed in &block.immed_data {
-                walker.write(*immed);
-            }
-
-            let event_data_size = block.calculate_event_data_size();
-            walker.write(event_data_size);
-
-            block.write_event_data(walker)?;
+            block.write_to_walker(walker)?;
         }
-
         Ok(())
     }
+}
+
+pub fn opcode_metadata() -> HashMap<u8, OpcodeMetadata> {
+    let mut metadata = HashMap::new();
+    for &(i, description, ref sizes, callback) in DESCRIPTIONS.iter() {
+        let url = format!("https://github.com/atom0s/XiEvents/blob/main/OpCodes/0x{:02X}.md", i);
+        metadata.insert(
+            i,
+            OpcodeMetadata {
+                description,
+                url,
+                sizes: sizes.to_vec(),
+                callback,
+            },
+        );
+    }
+    metadata
 }
 
 impl DatFormat for Event {
@@ -392,10 +483,10 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
+    use std::{fs::File, io::BufReader, path::PathBuf};
 
     #[test]
-    pub fn windurst_woods() {
+    pub fn windurst_woods_from_dat() {
         let mut dat_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         dat_path.push("resources/test/event_windurst_woods.DAT");
 
@@ -405,5 +496,24 @@ mod tests {
         // Parse the file and validate results
         let res = Event::from_path_checked(&dat_path).unwrap();
         assert!(res.header.block_count > 0);
+    }
+
+    #[test]
+    pub fn windurst_woods_from_yaml() -> Result<()> {
+        let mut yaml_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        yaml_path.push("resources/test/event_windurst_woods.yml");
+
+        let raw_data_file = File::open(&yaml_path).map_err(|err| {
+            anyhow!(
+                "Could not open file at {}: {}",
+                &yaml_path.display(),
+                err
+            )
+        })?;
+
+        let data: Event = serde_yaml::from_reader(BufReader::new(raw_data_file))
+            .map_err(|err| anyhow!("Failed to parse YAML: {}", err))?;
+
+        Ok(())
     }
 }

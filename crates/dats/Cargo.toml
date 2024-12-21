@@ -10,6 +10,7 @@ encoding = { path = "../encoding" }
 anyhow = "1.0.71"
 serde = { version = "1.0.162", features = ["derive"] }
 serde_derive = "1.0.162"
+serde_yaml = "0.9"
 regex = "1.9.1"
 base64 = "0.21.3"
 bitflags = "2.4.0"
