@@ -241,21 +241,32 @@ impl EventBlock {
                     // Single size
                     meta.sizes[0]
                 } else if let Some(callback) = meta.callback {
-                    // Use the callback
-                    match callback(
-                        opcode,
-                        walker.read_bytes_at(walker.offset(), end_offset - walker.offset()).unwrap_or_default(),
-                        &opcodes,
-                    ) {
-                        Some(size) => size,
-                        None => {
-                            eprintln!(
-                                "Warning: Failed to determine size dynamically for opcode 0x{:02X}. Fallback to raw bytes.",
-                                opcode
-                            );
-                            walker.goto(start_offset as u32);
-                            let remaining = walker.take_bytes(end_offset - start_offset)?.to_vec();
-                            return Ok(ParsedData::RawBytes(remaining));
+                    let size_from_lookahead = Self::check_opcode_size_by_validity(
+                                    &meta.sizes,
+                                    start_offset,
+                                    walker,
+                                    end_offset,
+                                )?;
+                    if let Some(unique_size) = size_from_lookahead {
+                        // We have a single, unambiguous size from lookahead
+                        unique_size
+                    } else {
+                        // Use the callback
+                        match callback(
+                            opcode,
+                            walker.read_bytes_at(walker.offset(), end_offset - walker.offset()).unwrap_or_default(),
+                            &opcodes,
+                        ) {
+                            Some(size) => size,
+                            None => {
+                                eprintln!(
+                                    "Warning: Failed to determine size dynamically for opcode 0x{:02X}. Fallback to raw bytes.",
+                                    opcode
+                                );
+                                walker.goto(start_offset as u32);
+                                let remaining = walker.take_bytes(end_offset - start_offset)?.to_vec();
+                                return Ok(ParsedData::RawBytes(remaining));
+                            }
                         }
                     }
                 } else {
@@ -314,6 +325,40 @@ impl EventBlock {
 
         Ok(ParsedData::Opcodes(opcodes))
     }
+
+    /// Checks each candidate length to see if it leads to a valid next opcode (0x00..=0xD9).
+    /// If **exactly one** candidate passes the test, returns Some(length).
+    /// Otherwise returns None (0 or multiple matches).
+    fn check_opcode_size_by_validity(
+        candidate_sizes: &[usize],
+        start_offset: usize,
+        walker: &mut impl ByteWalker,
+        end_offset: usize,
+    ) -> Result<Option<usize>> {
+        let mut valid_candidates = Vec::new();
+
+        for &length in candidate_sizes {
+            let next_offset = start_offset + length;
+            // Must be strictly less than end_offset to read the next byte
+            if next_offset < end_offset {
+                // Peek the would-be next opcode
+                let next_byte = walker.read_at::<u8>(next_offset)?;
+                // let next_byte = walker.read_at(next_offset)?;
+                // If it looks like a valid opcode, keep it
+                if (0x00..=0xD9).contains(&next_byte) {
+                    valid_candidates.push(length);
+                }
+            }
+        }
+
+        // If exactly 1 candidate remains, perfect
+        if valid_candidates.len() == 1 {
+            Ok(Some(valid_candidates[0]))
+        } else {
+            Ok(None)
+        }
+    }
+
 
     pub fn write_to_walker<T: WritingByteWalker>(&self, walker: &mut T) -> Result<()> {
         walker.write(self.actor_number);
@@ -510,6 +555,8 @@ mod tests {
         // Parse the file and validate results
         let res = Event::from_path_checked(&dat_path).unwrap();
         assert!(res.header.block_count > 0);
+        print_event_parse_summary(&res);
+        summarize_decoding_stats(&res);
     }
 
     #[test]
@@ -529,5 +576,67 @@ mod tests {
             .map_err(|err| anyhow!("Failed to parse YAML: {}", err))?;
 
         Ok(())
+    }
+
+    fn print_event_parse_summary(event: &Event) {
+        println!("Event file summary:");
+        println!("  Block count: {}", event.header.block_count);
+
+        for (block_index, block) in event.blocks.iter().enumerate() {
+            println!("  Block #{}:", block_index);
+
+            // For each event series in this block
+            for (series_index, series) in block.event_series.iter().enumerate() {
+                match &series.parsed_data {
+                    ParsedData::Opcodes(opcodes) => {
+                        println!(
+                            "    Series #{} (ExecNum = {}): {} opcodes",
+                            series_index,
+                            series.id,
+                            opcodes.len()
+                        );
+                    }
+                    ParsedData::RawBytes(bytes) => {
+                        println!(
+                            "    Series #{} (ExecNum = {}): RAW BYTES fallback (length = {})",
+                            series_index,
+                            series.id,
+                            bytes.len()
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    fn summarize_decoding_stats(event: &Event) {
+        let mut total_series = 0;
+        let mut series_opcodes = 0;
+        let mut series_raw = 0;
+        let mut total_opcodes = 0;
+        let mut total_raw_bytes = 0;
+
+        for block in &event.blocks {
+            for series in &block.event_series {
+                total_series += 1;
+                match &series.parsed_data {
+                    ParsedData::Opcodes(opcodes) => {
+                        series_opcodes += 1;
+                        total_opcodes += opcodes.len();
+                    }
+                    ParsedData::RawBytes(bytes) => {
+                        series_raw += 1;
+                        total_raw_bytes += bytes.len();
+                    }
+                }
+            }
+        }
+
+        println!("Decoding Stats:");
+        println!("  Total EventSeries: {}", total_series);
+        println!("  Decoded as opcodes: {}", series_opcodes);
+        println!("  Fallback to raw bytes: {}", series_raw);
+        println!("  Total opcodes parsed: {}", total_opcodes);
+        println!("  Total raw bytes: {}", total_raw_bytes);
     }
 }
