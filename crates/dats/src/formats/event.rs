@@ -193,7 +193,7 @@ impl EventBlock {
                     end_offset
                 ));
             }
-
+            eprintln!("Parsing event: {}", event_exec_nums[i]);
             // Parse opcodes within the series and group them together
             match Self::parse_opcodes(walker, end_offset)? {
                 ParsedData::Opcodes(opcodes) => series_list.push(EventSeries {
@@ -220,9 +220,13 @@ impl EventBlock {
             if opcode == INVALID_OPCODE || walker.offset() > end_offset {
                 // Bad opcode found
                 eprintln!(
-                    "Warning: No metadata available for opcode 0x{:02X}. Fallback to raw bytes.",
-                    opcode
+                    "Error: Invalid opcode or out-of-bounds read. Opcode=0x{:02X}, Offset={}, Start={}, End={}",
+                    opcode,
+                    walker.offset(),
+                    start_offset,
+                    end_offset
                 );
+                Self::log_history(&opcodes, walker.offset());
                 walker.goto(start_offset as u32);
                 let remaining = walker.take_bytes(end_offset - start_offset)?.to_vec();
                 return Ok(ParsedData::RawBytes(remaining));
@@ -243,7 +247,7 @@ impl EventBlock {
                 } else if let Some(callback) = meta.callback {
                     let size_from_lookahead = Self::check_opcode_size_by_validity(
                                     &meta.sizes,
-                                    start_offset,
+                                    walker.offset(),
                                     walker,
                                     end_offset,
                                 )?;
@@ -260,8 +264,17 @@ impl EventBlock {
                             Some(size) => size,
                             None => {
                                 eprintln!(
-                                    "Warning: Failed to determine size dynamically for opcode 0x{:02X}. Fallback to raw bytes.",
-                                    opcode
+                                    "Error: Failed to determine size dynamically. Opcode=0x{:02X}, Offset={}, Metadata URL={:?}",
+                                    opcode,
+                                    walker.offset(),
+                                    url
+                                );
+                                Self::log_history(&opcodes, walker.offset());
+
+                                callback(
+                                    opcode,
+                                    walker.read_bytes_at(walker.offset(), end_offset - walker.offset()).unwrap_or_default(),
+                                    &opcodes,
                                 );
                                 walker.goto(start_offset as u32);
                                 let remaining = walker.take_bytes(end_offset - start_offset)?.to_vec();
@@ -272,9 +285,13 @@ impl EventBlock {
                 } else {
                     // Multiple sizes without callback
                     eprintln!(
-                        "Warning: Opcode 0x{:02X} has multiple sizes, but no callback. Fallback to raw bytes.",
-                        opcode
+                        "Warning: Opcode 0x{:02X} has multiple sizes, but no callback. . Offset={}, Metadata URL={:?}Fallback to raw bytes.",
+                        opcode,
+                        walker.offset(),
+                        url
                     );
+                    Self::log_history(&opcodes, walker.offset());
+
                     walker.goto(start_offset as u32); // Ensure we rewind to start
                     let remaining = walker.take_bytes(end_offset - start_offset)?.to_vec();
                     return Ok(ParsedData::RawBytes(remaining));
@@ -282,9 +299,13 @@ impl EventBlock {
             } else {
                 // No metadata
                 eprintln!(
-                    "Warning: No metadata available for opcode 0x{:02X}. Fallback to raw bytes.",
-                    opcode
+                    "Error: No metadata for opcode 0x{:02X}. Offset={}, Start={}, End={}",
+                    opcode,
+                    walker.offset(),
+                    start_offset,
+                    end_offset
                 );
+                Self::log_history(&opcodes, walker.offset());
 
                 walker.goto(start_offset as u32); // Ensure we rewind to start
                 let remaining = walker.take_bytes(end_offset - start_offset)?.to_vec();
@@ -305,6 +326,8 @@ impl EventBlock {
                         "Warning: Opcode 0x{:02X} params exceeded expected size. Fallback to raw bytes.",
                         opcode
                     );
+                    Self::log_history(&opcodes, walker.offset());
+
                     walker.goto(start_offset as u32); // Ensure we rewind to start
                     let remaining = walker.take_bytes(end_offset - start_offset)?.to_vec();
                     return Ok(ParsedData::RawBytes(remaining));
@@ -326,6 +349,21 @@ impl EventBlock {
         Ok(ParsedData::Opcodes(opcodes))
     }
 
+    fn log_history(opcodes: &[EventOpcode], current_offset: usize) {
+        eprintln!("Opcode history up to offset {}:", current_offset);
+        for (i, opcode) in opcodes.iter().enumerate() {
+            eprintln!(
+                "  [{}] Opcode=0x{:02X}, Params={:?}",
+                i,
+                opcode.opcode,
+                opcode.params
+                    .iter()
+                    .map(|byte| format!("0x{:02X}", byte)) // Format each byte as hex
+                    .collect::<Vec<_>>() // Collect into a vector of strings
+            );
+        }
+    }
+
     /// Checks each candidate length to see if it leads to a valid next opcode (0x00..=0xD9).
     /// If **exactly one** candidate passes the test, returns Some(length).
     /// Otherwise returns None (0 or multiple matches).
@@ -338,7 +376,7 @@ impl EventBlock {
         let mut valid_candidates = Vec::new();
 
         for &length in candidate_sizes {
-            let next_offset = start_offset + length;
+            let next_offset = start_offset + length - 1;
             // Must be strictly less than end_offset to read the next byte
             if next_offset < end_offset {
                 // Peek the would-be next opcode
@@ -443,7 +481,7 @@ impl Event {
 pub fn opcode_metadata() -> HashMap<u8, OpcodeMetadata> {
     let mut metadata = HashMap::new();
     for &(i, description, ref sizes, callback) in DESCRIPTIONS.iter() {
-        let url = format!("https://github.com/atom0s/XiEvents/blob/main/OpCodes/0x{:02X}.md", i);
+        let url = format!("https://github.com/atom0s/XiEvents/blob/main/OpCodes/0x00{:02X}.md", i);
         metadata.insert(
             i,
             OpcodeMetadata {
@@ -546,8 +584,8 @@ mod tests {
     #[test]
     pub fn windurst_woods_from_dat() {
         let mut dat_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        // dat_path.push("resources/test/event_windurst_woods.DAT");
-        dat_path.push("resources/test/event_southern_sandoria.DAT");
+        dat_path.push("resources/test/event_windurst_woods)horizon.DAT");
+        // dat_path.push("resources/test/event_southern_sandoria.DAT");
 
         // Check header validity
         Event::check_path(&dat_path).unwrap();

@@ -51,7 +51,7 @@ pub const DESCRIPTIONS: [(u8, &str, &'static [usize], Option<OpcodeSizeCallback>
     (0x2E, "Sets the CliEventCancelSetData flag. If CliEventCancelSetFlag is set, also sets the CliEventCancelFlag flag.", &[1], None),
     (0x2F, "Adjusts the given entities Render.Flag0 value.", &[6], None),
     (0x30, "Sets the ucoff_continue flag to 0.", &[1], None),
-    (0x31, "Updates the event position information.", &[2, 10], None),
+    (0x31, "Updates the event position information.", &[2, 10], Some(determine_opcode_0x31_size)),
     (0x32, "Sets the ExtData[1]->MainSpeed value.", &[3], None),
     (0x33, "Adjusts the event entities Render.Flags0 value.", &[2], None),
     (0x34, "Appears to load and unload an additional zone to be used with the event.", &[3], None),
@@ -90,14 +90,14 @@ pub const DESCRIPTIONS: [(u8, &str, &'static [usize], Option<OpcodeSizeCallback>
     (0x55, "Waits for the Main/Load schedular to finish its current action.", &[15], None),
     (0x56, "Deprecated. This opcode does not do anything with the values it reads anymore. This appears to be deprecated.", &[5], None),
     (0x57, "Creates a frame delay from the current frame delay value and stores it.", &[3], None),
-    (0x58, "Yields the event VM.", &[3], None),
+    (0x58, "Yields the event VM.", &[1], None),
     (0x59, "Handles multiple cases regarding updating an entities data for events.", &[4, 6, 7, 8], Some(determine_opcode_0x59_size)),
     (0x5A, "Updates the event position information.", &[2, 8], Some(determine_opcode_0x5a_size)),
     (0x5B, "Loads an extended schedular task.", &[15, 17], Some(determine_opcode_0x5b_size)),
     (0x5C, "Handles multiple cases regarding the music player.", &[4, 6], Some(determine_opcode_0x5c_size)),
     (0x5D, "Sets, or eases, the current playing music to a new volume.", &[5], None),
     (0x5E, "Appears to stop the event entities current action and reset them back to an idle motion.", &[5], None),
-    (0x5F, "This handler has a few cases, most of which call other opcode handlers and react based on their returns.", &[2, 7, 14, 16, 18], Some(determine_opcode_0x5f_size)),
+    (0x5F, "This handler has a few cases, most of which call other opcode handlers and react based on their returns.", &[2, 6, 14, 16, 18], Some(determine_opcode_0x5f_size)),
     (0x60, "Handler with multiple use cases. The default case where the opcode was two bytes long was deprecated and just skipped now. Adjusts the event entities Render.Flags1 value.", &[2, 4, 6], Some(determine_opcode_0x60_size)),
     (0x61, "Adjusts the event entities Render.Flags2 value.", &[2], None),
     (0x62, "Handler that calls the same helper call as opcode 0x0045, just with a different second argument.", &[17], None),
@@ -108,7 +108,7 @@ pub const DESCRIPTIONS: [(u8, &str, &'static [usize], Option<OpcodeSizeCallback>
     (0x67, "Tells the client to hide the entire HUD UI elements during the cutscene. (ie. The compass, status icons, chat, menus, etc.)", &[5], None),
     (0x68, "Tells the client to unhide the entire HUD UI elements. (ie. The compass, status icons, chat, menus, etc.)", &[1], None),
     (0x69, "Sets the sound volume of the desired sound type.", &[4], None),
-    (0x6A, "Changes the sound volume of the desired sound type.", &[4], None),
+    (0x6A, "Changes the sound volume of the desired sound type.", &[7], None),
     (0x6B, "Appears to stop the given entities current action and reset them back to an idle motion.", &[9], None),
     (0x6C, "Fades an enities color in and out. This can be used to both set just the alpha of the entity, but also the color. This works in stages to allow the color to fade in and/or out smoothly, or immediately, depending on the time values set.", &[9], None),
     (0x6D, "Deprecated. This opcode appears to be deprecated, it does nothing.", &[7], None),
@@ -119,14 +119,14 @@ pub const DESCRIPTIONS: [(u8, &str, &'static [usize], Option<OpcodeSizeCallback>
     (0x72, "Appears to load event based weather information and update the weather accordingly for it.", &[4, 6, 10], Some(determine_opcode_0x72_size)),
     (0x73, "Schedules tasks for casting magic on the two given entities.", &[11], None),
     (0x74, "Adjusts the event entities Render.Flags1 value.", &[2], None),
-    (0x75, "Loads a room and updates the players sub-region with the server.", &[4, 6, 8], Some(determine_opcode_0x75_size)),
+    (0x75, "Loads a room and updates the players sub-region with the server.", &[2, 4], Some(determine_opcode_0x75_size)),
     (0x76, "Checks the given entities Render.Flags0 and Render.Flags3 and yields if successful.", &[5], None),
     (0x77, "Disables the game clock and sets the client to a specific time for the event. Can also set the weather at the same time.", &[5], None),
     (0x78, "Enables the game timer and resets the zone weather.", &[1], None),
     (0x79, "Used to look at / rotate towards another entity.", &[10, 12], Some(determine_opcode_0x79_size)),
     (0x7A, "Handles multiple entity conditions dependant on following event byte cases.", &[2, 6, 7, 8], Some(determine_opcode_0x7a_size)),
     (0x7B, "Unsets the given entities talking status, setting their NpcSpeechFrame back to -1.", &[5], None),
-    (0x7C, "Adjusts the given entities Render.Flags2 value.", &[5], None),
+    (0x7C, "Adjusts the given entities Render.Flags2 value.", &[6], None),
     (0x7D, "Loads and starts a scheduled task using the local player as the entity. (Appears to be used to display rank up animations.)", &[3], None),
     (0x7E, "Multi-purpose opcode relating to chocobos and mounts.", &[6, 8, 16, 18], Some(determine_opcode_0x7e_size)),
     (0x7F, "Waits for a dialog select to be made by the player.", &[1], None),
@@ -169,7 +169,7 @@ pub const DESCRIPTIONS: [(u8, &str, &'static [usize], Option<OpcodeSizeCallback>
     (0xA4, "Adjusts the event entities Render.Flags3 value.", &[2], None),
     (0xA5, "Adjusts the event entities Render.Flags3 value.", &[2], None),
     (0xA6, "Requests the event map number from the server by sending a 0x00EB packet. Sets the PTR_RecvEventMapNumFlag to mark the client as awaiting for a response and then yields until it is unset.", &[1, 4], Some(determine_opcode_0xa6_size)),
-    (0xA7, "Waits for the server to respond to a client request. This is used with battlefield registration NPCs. (ie. Dynamis, Moblin Maze Mongers, Salvage, etc.)", &[12, 4], None),//Some(determine_opcode_0xa7_size)),
+    (0xA7, "Waits for the server to respond to a client request. This is used with battlefield registration NPCs. (ie. Dynamis, Moblin Maze Mongers, Salvage, etc.)", &[12, 4], Some(determine_opcode_0xa7_size)),
     (0xA8, "Opens the map (if requested, &[1], None), unlocks and renames markers.", &[6], None),
     (0xA9, "Disables the game time and sets it to a specific given time.", &[3], None),
     (0xAA, "Gets a value to be used as a Vana'diel timestamp. Converts that timestamp into the various time parts and stores them.", &[17], None),
@@ -182,10 +182,10 @@ pub const DESCRIPTIONS: [(u8, &str, &'static [usize], Option<OpcodeSizeCallback>
     (0xB1, "Gets and stores the value of a flag. PTR_UnknownValue is part of the main app object which is initialized to 128. This valid doesn't seem to ever change, and has been the same since the original beta of the game. At this time, the purpose of this value is unknown.", &[4], None),
     (0xB2, "Handler has two modes. The first mode requests opening the delivery box. The second mode is to wait a certain amount of time, used to wait for the delivery box to open.", &[2, 4], Some(determine_opcode_0xb2_size)),
     (0xB3, "This handler is used for dealing with the rankings boards. For example, the fishing rank boards with Chenon in Selbina.", &[2, 4, 14, 18], Some(determine_opcode_0xb3_size)),
-    (0xB4, "Handler with multiple sub-usages.", &[2, 3, 4, 6, 12, 20], None),
+    (0xB4, "Handler with multiple sub-usages.", &[2, 3, 4, 6, 12, 20], Some(determine_opcode_0xb4_size)),
     (0xB5, "Sets the current event entities name.", &[4], None),
     (0xB6, "Handler with multiple sub-usages. Related to entity looks / gear visuals.", &[2, 4, 6, 14, 16, 20], Some(determine_opcode_0xb6_size)),
-    (0xB7, "Handler with multiple sub-usages.", &[8, 10], None),
+    (0xB7, "Handler with multiple sub-usages.", &[8, 10], Some(determine_opcode_0xb7_size)),
     (0xB8, "Opens the map (if requested, &[1], None), adds and sets markers.", &[27], None),
     (0xB9, "Opens the map (if requested, &[1], None), edits and renames a marker. (Name is taken from the event Read buffer.)", &[8], None),
     (0xBA, "Obtains the given entity, if valid, attempts to calibrate its position then calls XiAtelBuff::CopyAllPosEvent and XiAtelBuff::ReqExecHitCheck.", &[13], None),
@@ -196,7 +196,7 @@ pub const DESCRIPTIONS: [(u8, &str, &'static [usize], Option<OpcodeSizeCallback>
     (0xBF, "Handler that is used for chocobo racing. This handler has debug messages left in, so it can be translated to actual opcode names.", &[8, 10], Some(determine_opcode_0xbf_size)),
     (0xC0, "Adjusts the event entities Render.Flags3 value.", &[3], None),
     (0xC1, "Obtains the given entity, tests it for something. If successful, then the last action is killed and its resp data is deleted.", &[5], None),
-    (0xC2, "The purpose of this opcode is currently unknown. This makes use of the internal party state object, checking for flags/values. These check if a flag is set that is more recently added to the party structure.", &[2, 4, 6], None),
+    (0xC2, "The purpose of this opcode is currently unknown. This makes use of the internal party state object, checking for flags/values. These check if a flag is set that is more recently added to the party structure.", &[2, 4, 6], Some(determine_opcode_0xc2_size)),
     (0xC3, "Copies a string value into an unknown buffer array.", &[7], None),
     (0xC4, "Handler that calls the same helper call as opcode 0x0073, just with a different arguments.", &[11], None),
     (0xC5, "Handler that calls the same helper call as opcode 0x0045, just with a different second argument.", &[17], None),
@@ -222,9 +222,8 @@ pub const DESCRIPTIONS: [(u8, &str, &'static [usize], Option<OpcodeSizeCallback>
     (0xD9, "Sets an unknown flag value.", &[2], None),
 ];
 
-/// Example callback for 0x1F:
-///   - If the first parameter is 0x00, total size is 8 bytes.
-///   - If it’s 0x01, total size is 2 bytes.
+/// https://github.com/atom0s/XiEvents/blob/main/OpCodes/0x001F.md
+///    - Potential lengths: 2, 8
 pub fn determine_opcode_0x1f_size(
     opcode: u8,
     data: &[u8],
@@ -235,14 +234,13 @@ pub fn determine_opcode_0x1f_size(
     }
 
     match data[0] {
-        0x00 => Some(8),
         0x01 => Some(2),
-        _ => None,
+        _ => Some(8),
     }
 }
 
-/// Example callback for 0x31:
-///   - If the first byte == 0x00, total size = 2, else total size = 10
+/// https://github.com/atom0s/XiEvents/blob/main/OpCodes/0x0031.md
+///    - Potential lengths: 2, 10
 pub fn determine_opcode_0x31_size(
     opcode: u8,
     data: &[u8],
@@ -253,15 +251,22 @@ pub fn determine_opcode_0x31_size(
     }
 
     match data[0] {
-        0 => Some(10),
-        1 => Some(2),
-        _ => None,
+        0x00 => Some(10),
+        0x01 => Some(2),
+        _ => {
+            if data.len() < 10 {
+                eprintln!(
+                    "Unexpected data[0] for opcode 0x31: data = 0x{:02X}",
+                    data[0]
+                );
+            }
+            return None;
+        }
     }
 }
 
-/// Example callback for 0x46:
-///   - If the first parameter is 0x02, total size is 4 bytes.
-///   - Else, total size is 2 bytes.
+/// https://github.com/atom0s/XiEvents/blob/main/OpCodes/0x0046.md
+///    - Potential lengths: 2, 4
 pub fn determine_opcode_0x46_size(
     opcode: u8,
     data: &[u8],
@@ -272,13 +277,14 @@ pub fn determine_opcode_0x46_size(
     }
 
     match data[0] {
-        2 => Some(4),
-        _ => Some(2),
+        0x01 => Some(2),
+        0x02 => Some(4),
+        _ => Some(2)
     }
 }
 
-/// Example callback for 0x47:
-///   - Maybe first call is 10 bytes, subsequent calls are 2 bytes.
+/// https://github.com/atom0s/XiEvents/blob/main/OpCodes/0x0047.md
+///    - Potential lengths: 2, 10
 pub fn determine_opcode_0x47_size(
     opcode: u8,
     data: &[u8],
@@ -291,12 +297,18 @@ pub fn determine_opcode_0x47_size(
     match data[0] {
         0 => Some(10),
         1 => Some(2),
-        _ => None,
+        _ => {
+            eprintln!(
+                "Unexpected data[0] for opcode 0x47: data = 0x{:02X}",
+                data[0]
+            );
+            return None;
+        }
     }
 }
 
-/// Example callback for 0x59:
-///   - This opcode has potential lengths 4, 6, 7, 8. Let’s say it depends on the first byte.
+/// https://github.com/atom0s/XiEvents/blob/main/OpCodes/0x0059.md
+///   - Potential lengths:  4, 6, 7, 8
 pub fn determine_opcode_0x59_size(
     opcode: u8,
     data: &[u8],
@@ -312,10 +324,18 @@ pub fn determine_opcode_0x59_size(
         0x01 | 0x03 | 0x04 | 0x08 => Some(8),
         0x05 => Some(7),
         0x06 => Some(6),
-        _ => None,
+        _ => {
+            eprintln!(
+                "Unexpected data[0] for opcode 0x59: data = 0x{:02X}",
+                data[0]
+            );
+            return None;
+        }
     }
 }
 
+/// https://github.com/atom0s/XiEvents/blob/main/OpCodes/0x005A.md
+///   - Potential lengths: 2, 8
 pub fn determine_opcode_0x5a_size(
     opcode: u8,
     data: &[u8],
@@ -326,26 +346,42 @@ pub fn determine_opcode_0x5a_size(
     }
     // Example: if sub-code == 0 => total size 2, else => 8
     match data[0] {
-        0x01 => Some(2),
-        // or do a more complex pattern if needed
-        _ => Some(8),
+        0 => Some(8),
+        1 => Some(2),
+        _ => {
+            eprintln!(
+                "Unexpected data[0] for opcode 0x5A: data = 0x{:02X}",
+                data[0]
+            );
+            return None;
+        }
     }
 }
 
-/// Example callback for 0x5B:
-///   - Could be 15 or 17 bytes. Maybe if data[0] == 0xAA => 17, else => 15
+/// https://github.com/atom0s/XiEvents/blob/main/OpCodes/0x005B.md
+///   - Potential lengths: 15, 17
 pub fn determine_opcode_0x5b_size(
     opcode: u8,
     data: &[u8],
     _previous_opcodes: &[EventOpcode],
 ) -> Option<usize> {
-    if opcode != 0x5B || data.is_empty() {
+    if opcode != 0x5B || data.len() < 15 {
         return None;
     }
 
-    None//Some(15 or 17, depending on param3..)
+    let param3 = 0; // From FUNC_XiEvent_OpCode_0x005B_(this, 0, 1, 0)
+
+    // Base size
+    let base_size = 15;
+
+    // Add 2 bytes if param3 is non-zero
+    let total_size = if param3 != 0 { base_size + 2 } else { base_size };
+
+    Some(total_size)
 }
 
+/// https://github.com/atom0s/XiEvents/blob/main/OpCodes/0x005C.md
+///   - Potential lengths: 4, 6
 pub fn determine_opcode_0x5c_size(
     opcode: u8,
     data: &[u8],
@@ -354,45 +390,49 @@ pub fn determine_opcode_0x5c_size(
     if opcode != 0x5C || data.is_empty() {
         return None;
     }
-    // Atomos' code shows 4 as an optional length, but the snippet only shows 6 being returned
-    // https://github.com/atom0s/XiEvents/blob/main/OpCodes/0x5c.md
+
     match data[0] {
-        _ => Some(6),
+        0x00..=0x07 => Some(4),
+        0x80..=0x87 | 0xA0..=0xA1 => Some(6),
+        _ => {
+            eprintln!(
+                "Unexpected first byte for opcode 0x5C: value = 0x{:02X}",
+                data[0]
+            );
+            None
+        }
     }
 }
 
-/// Example callback for 0x5F:
-///   - Potential lengths: 2, 7, 14, 16, 18
-///   - Here you might look at data[0] or data[1], etc., to decide
+/// https://github.com/atom0s/XiEvents/blob/main/OpCodes/0x005F.md
+///   - Potential lengths: 2, 6, 14, 16, 18
 pub fn determine_opcode_0x5f_size(
     opcode: u8,
     data: &[u8],
     _previous_opcodes: &[EventOpcode],
 ) -> Option<usize> {
-    // Must be opcode 0x5F and at least 1 byte (the sub-code).
     if opcode != 0x5F || data.is_empty() {
         return None;
     }
 
     match data[0] {
-        // sub-code = 0 or 1 => +2
-        0x00 | 1 => Some(2),
-
-        // guesses..
-        0x02 => Some(7),
-        0x03 => Some(14),
-        0x04 => Some(16),
-        0x05 => Some(18),
-        0x06 => Some(16),
-        0x07 => Some(18),
-        _ => None,
+        0x00 | 0x01 => Some(2),
+        0x02 => Some(6),
+        0x03 | 0x04 => Some(16),
+        0x05 | 0x06 => Some(18),
+        0x07 => Some(14),
+        _ => {
+            eprintln!(
+                "Unexpected first byte for opcode 0x5F: value = 0x{:02X}",
+                data[0]
+            );
+            None
+        }
     }
 }
 
-
-/// Example callback for 0x60:
+/// https://github.com/atom0s/XiEvents/blob/main/OpCodes/0x0060.md
 ///   - Potential lengths: 2, 4, 6
-///   - Possibly depends on data[0]
 pub fn determine_opcode_0x60_size(
     opcode: u8,
     data: &[u8],
@@ -408,29 +448,31 @@ pub fn determine_opcode_0x60_size(
     }
 }
 
+/// https://github.com/atom0s/XiEvents/blob/main/OpCodes/0x0066.md
+///    - Potential lengths: 15, 17
 pub fn determine_opcode_0x66_size(
     opcode: u8,
     data: &[u8],
-    _prev_opcodes: &[EventOpcode],
+    _previous_opcodes: &[EventOpcode],
 ) -> Option<usize> {
-    if opcode != 0x66 || data.is_empty() {
+
+    if opcode != 0x66 || data.len() < 15 {
         return None;
     }
 
-    // Feels too ambiguous
-    // // PS2: XiEvent::CodeLOADEXTSCHEDULERMain
-    // void __thiscall FUNC_XiEvent_OpCode_0x0066(xievent_t* this)
-    // {
-    //     FUNC_XiEvent_OpCode_0x005B_(this, 0, 1, 0);
-    // }
+    let param3 = 0; // From FUNC_XiEvent_OpCode_0x0066_(this, 1, 1, 0)
 
-    match data[0] {
-        _ => None,//Some(15),
-    }
+    // Base size
+    let base_size = 15;
+
+    // Add 2 bytes if param3 is non-zero
+    let total_size = if param3 != 0 { base_size + 2 } else { base_size };
+
+    Some(total_size)
 }
 
-/// Example callback for 0x71:
-///   - Potential lengths: 2, 4, 6, 8, 10
+/// https://github.com/atom0s/XiEvents/blob/main/OpCodes/0x0071.md
+///   - Potential lengths: 2, 4, 6, 8, 10, 16
 pub fn determine_opcode_0x71_size(
     opcode: u8,
     data: &[u8],
@@ -452,7 +494,8 @@ pub fn determine_opcode_0x71_size(
     }
 }
 
-/// Example callback for 0x72:
+/// https://github.com/atom0s/XiEvents/blob/main/OpCodes/0x0072.md
+/// Did not see an implementation of FUNC_XiFileManager_readFileCB for size 10
 ///   - Potential lengths: 4, 6, 10
 pub fn determine_opcode_0x72_size(
     opcode: u8,
@@ -463,15 +506,16 @@ pub fn determine_opcode_0x72_size(
         return None;
     }
 
-    // Example: maybe data[0] picks which
     match data[0] {
-        // // Sub-code=0 => could be 4 or 10 in practice depending on FUNC_XiFileManager_readFileCB...
-        // 0 => Some(10),
-        // 1 => Some(6),
+        0x00 => Some(4),
+        0x01 => Some(6),
         _ => None,
     }
 }
 
+/// https://github.com/atom0s/XiEvents/blob/main/OpCodes/0x0072.md
+/// Did not see an implementation of FUNC_ZoneSubMapChangeSet for size 10
+///   - Potential lengths: 2, 4
 pub fn determine_opcode_0x75_size(
     opcode: u8,
     data: &[u8],
@@ -482,17 +526,16 @@ pub fn determine_opcode_0x75_size(
     }
 
     match data[0] {
-        // 0x01 => Some(2),
-        // 0x02 => Some(),   //can be 6 or 8 depending on internal state: FUNC_ZoneSubMapChangeSet(2, val)
-        // _ => Some(4),
+        0x00 => Some(4),
+        0x01 => Some(2),
+        0x02 => Some(2),   // can be -6 + 6 or 8 depending on internal state: FUNC_ZoneSubMapChangeSet(2, val)
         _ => None
     }
 }
 
 
-/// Example callback for 0x79:
+/// https://github.com/atom0s/XiEvents/blob/main/OpCodes/0x0079.md
 ///   - Potential lengths: 10 or 12
-///   - Maybe check data[0], etc.
 pub fn determine_opcode_0x79_size(
     opcode: u8,
     data: &[u8],
@@ -508,7 +551,7 @@ pub fn determine_opcode_0x79_size(
     }
 }
 
-/// Example callback for 0x7A:
+/// https://github.com/atom0s/XiEvents/blob/main/OpCodes/0x007A.md
 ///   - Potential lengths: 2, 6, 7, 8
 pub fn determine_opcode_0x7a_size(
     opcode: u8,
@@ -524,11 +567,18 @@ pub fn determine_opcode_0x7a_size(
         0x01 => Some(7),
         0x03 => Some(2),
         0x04 => Some(8),
-        _ => None, // unknown sub-code => fallback to raw
+        _ => {
+            eprintln!(
+                "Unexpected first byte for opcode 0x7A: value = 0x{:02X}",
+                data[0]
+            );
+            None
+        }
     }
 }
 
-
+/// https://github.com/atom0s/XiEvents/blob/main/OpCodes/0x007E.md
+///   - Potential lengths: 6, 8, 16, 18
 pub fn determine_opcode_0x7e_size(
     opcode: u8,
     data: &[u8],
@@ -539,16 +589,21 @@ pub fn determine_opcode_0x7e_size(
     }
 
     match data[0] {
-        0x00 | 0x01 | 0x02 | 0x04 | 0x05 | 0x08 => Some(6),   // total size = 6 bytes
+        0x00 | 0x01 | 0x02 | 0x04 | 0x05 | 0x08 => Some(6),
         0x03 => Some(16),
         0x06 => Some(18),
         0x07 => Some(8),
-        _ => Some(0),  // unknown sub-code => fallback to raw
+        _ => {
+            eprintln!(
+                "Unexpected first byte for opcode 0x7E: value = 0x{:02X}",
+                data[0]
+            );
+            None // Noted as 0 but possibly wrong by atom0s
+        }
     }
 }
 
-
-/// Example callback for 0x8C:
+/// https://github.com/atom0s/XiEvents/blob/main/OpCodes/0x008C.md
 ///   - Potential lengths: 2, 8, 10, 12, 14
 pub fn determine_opcode_0x8c_size(
     opcode: u8,
@@ -565,13 +620,18 @@ pub fn determine_opcode_0x8c_size(
         0x02 => Some(12),
         0x03 | 0x04 => Some(10),
         0x05 => Some(14),
-        _ => None, // unknown sub-code => fallback to raw
+        _ => {
+            eprintln!(
+                "Unexpected first byte for opcode 0x8C: value = 0x{:02X}",
+                data[0]
+            );
+            None
+        }
     }
 }
 
-
-/// Example callback for 0x9D:
-///   - Potential lengths: 6, 8, 9, 10, 23
+/// https://github.com/atom0s/XiEvents/blob/main/OpCodes/0x009D.md
+///   - Potential lengths: 6, 8, 9, 10, 23, ???
 pub fn determine_opcode_0x9d_size(
     opcode: u8,
     data: &[u8],
@@ -582,40 +642,74 @@ pub fn determine_opcode_0x9d_size(
     }
 
     match data[0] {
-        0x00 | 0x01 | 0x03 | 0x04 | 0x05 | 0x06 | 0x0E => Some(8),
+        0x00 | 0x01 | 0x03 | 0x04 | 0x05 | 0x06 => Some(8),
         0x02 | 0x07 => Some(6),
         0x08 => Some(23),
         0x09 => Some(9),
-        0x0A | 0x0B | 0x0D | 0x0F | 0x10 => Some(10),
+        0x0A | 0x0B | 0x0F | 0x10 => Some(10),
         0x0C => {
-            // We need at least 8 bytes to read 'val2' (offset 4..5) and 'val1' (offset 6..7).
             if data.len() < 8 {
-                return None; // Not enough data to decide
+                return None;
             }
 
-            // Read 'val2' from offset 4..5 (little-endian)
-            let val2 = u16::from_le_bytes([data[4], data[5]]);
-            // Read 'val1' from offset 6..7
+            // Read 'val1' from offset 6..7 and 'val2' from offset 4..5
             let val1 = u16::from_le_bytes([data[6], data[7]]);
+            let val2 = u16::from_le_bytes([data[4], data[5]]);
 
-            // If val1 != 0 and val1 <= val2 => val2 = 0
-            // (This matches the snippet logic: if (val1 && val1 <= val2) val2 = 0)
-            let mut val2_adjusted = val2;
             if val1 != 0 && val1 <= val2 {
-                val2_adjusted = 0;
-            }
-
-            // if (val2_adjusted >= 64) => total size = 6, else = 8
-            if val2_adjusted >= 64 {
+                Some(8)
+            } else if val2 >= 64 {
                 Some(6)
             } else {
                 Some(8)
             }
+        },
+        0x0D => {
+            if data.len() < 8 {
+                return None;
+            }
+
+            // Read 'val1' from offset 6..7 and 'val2' from offset 2..3
+            let val1 = u16::from_le_bytes([data[6], data[7]]);
+            let val2 = u16::from_le_bytes([data[2], data[3]]);
+
+            if val2 >= 64 {
+                Some(8)
+            // } else if PTR_Ptr_Work_Zone[val2 as usize].is_some() {
+            //     Some(8)
+            } else if val1 != 0 && val1 <= val2 {
+                Some(10)
+            } else {
+                Some(10)
+            }
+        },
+        0x0E => {
+            if data.len() < 8 {
+                return None;
+            }
+
+            // Read 'val1' from offset 6..7 and 'val2' from offset 2..3
+            let val1 = u16::from_le_bytes([data[6], data[7]]);
+            let val2 = u16::from_le_bytes([data[2], data[3]]);
+
+            if val2 < 64 {//} && PTR_Ptr_Work_Zone[val2 as usize].is_some() {
+                Some(10)
+            } else {
+                Some(8)
+            }
         }
-        _ => None, // unknown sub-code => fallback to raw bytes
+        _ => {
+            eprintln!(
+                "Unexpected first byte for opcode 0x9D: value = 0x{:02X}",
+                data[0]
+            );
+            None
+        }
     }
 }
 
+/// https://github.com/atom0s/XiEvents/blob/main/OpCodes/0x00A6.md
+///   - Potential lengths: 2, 4
 pub fn determine_opcode_0xa6_size(
     opcode: u8,
     data: &[u8],
@@ -625,26 +719,43 @@ pub fn determine_opcode_0xa6_size(
         return None;
     }
     match data[0] {
-        2 => Some(4),
-        _ => Some(2),
+        0x00 | 0x01 => Some(2),
+        0x02 => Some(4),
+        _ => {
+            eprintln!(
+                "Unexpected first byte for opcode 0xA6: value = 0x{:02X}",
+                data[0]
+            );
+            None
+        }
     }
 }
 
-// pub fn determine_opcode_0xa7_size(
-//     opcode: u8,
-//     data: &[u8],
-//     _prev_opcodes: &[EventOpcode],
-// ) -> Option<usize> {
-//     if opcode != 0xA7 || data.len() < 1 {
-//         return None;
-//     }
-//     match data[0] {
-//         0 => Some(4),
-//         1 => Some(12),
-//         _ => None,
-//     }
-// }
+/// https://github.com/atom0s/XiEvents/blob/main/OpCodes/0x00A7.md
+///   - Potential lengths: 2, 4
+pub fn determine_opcode_0xa7_size(
+    opcode: u8,
+    data: &[u8],
+    _prev_opcodes: &[EventOpcode],
+) -> Option<usize> {
+    if opcode != 0xA7 || data.len() < 1 {
+        return None;
+    }
+    match data[0] {
+        0x00 => Some(2),
+        0x01 => Some(4),
+        _ => {
+            eprintln!(
+                "Unexpected first byte for opcode 0xA7: value = 0x{:02X}",
+                data[0]
+            );
+            None
+        }
+    }
+}
 
+/// https://github.com/atom0s/XiEvents/blob/main/OpCodes/0x00AB.md
+///   - Potential lengths: 2, 4, 6
 pub fn determine_opcode_0xab_size(
     opcode: u8,
     data: &[u8],
@@ -657,11 +768,17 @@ pub fn determine_opcode_0xab_size(
         0x00 | 0x01 | 0x02 | 0x03 | 0x04 | 0x05 | 0x06 | 0x07 | 0x08 | 0x09 | 0x0A | 0x0B | 0x0C | 0x0D | 0x0F | 0x10 | 0x12 | 0x13 | 0x19 | 0x1A => Some(2),
         0x11 | 0x14 | 0x15 | 0x16 | 0x17 | 0x18 => Some(4),
         0x1B | 0x1C => Some(6),
-        _ => None,
+        _ => {
+            eprintln!(
+                "Unexpected first byte for opcode 0xAB: value = 0x{:02X}",
+                data[0]
+            );
+            None
+        }
     }
 }
 
-/// Example callback for 0xAC:
+/// https://github.com/atom0s/XiEvents/blob/main/OpCodes/0x00AC.md
 ///   - Potential lengths: 4, 6, 8
 pub fn determine_opcode_0xac_size(
     opcode: u8,
@@ -676,11 +793,17 @@ pub fn determine_opcode_0xac_size(
         0x00 | 0x01 => Some(4),
         0x02 | 0x03 => Some(6),
         0x04 => Some(8),
-        _ => None,
+        _ => {
+            eprintln!(
+                "Unexpected first byte for opcode 0xAC: value = 0x{:02X}",
+                data[0]
+            );
+            None
+        }
     }
 }
 
-/// Example callback for 0xAE:
+/// https://github.com/atom0s/XiEvents/blob/main/OpCodes/0x00AE.md
 ///   - Potential lengths: 6, 8, 10
 pub fn determine_opcode_0xae_size(
     opcode: u8,
@@ -695,10 +818,18 @@ pub fn determine_opcode_0xae_size(
         0x00 | 0x06 => Some(6),
         0x01 | 0x02 | 0x03 | 0x04 => Some(8),
         0x05 | 0x07 | 0x08 => Some(10),
-        _ => None,
+        _ => {
+            eprintln!(
+                "Unexpected first byte for opcode 0xAE: value = 0x{:02X}",
+                data[0]
+            );
+            None
+        }
     }
 }
 
+/// https://github.com/atom0s/XiEvents/blob/main/OpCodes/0x00B2.md
+///   - Potential lengths: 2, 4
 pub fn determine_opcode_0xb2_size(
     opcode: u8,
     data: &[u8],
@@ -708,12 +839,20 @@ pub fn determine_opcode_0xb2_size(
         return None;
     }
     match data[0] {
-        0 => Some(4),
-        1 => Some(2),
-        _ => None,
+        0x00 => Some(4),
+        0x01 => Some(2),
+        _ => {
+            eprintln!(
+                "Unexpected first byte for opcode 0xB2: value = 0x{:02X}",
+                data[0]
+            );
+            None
+        }
     }
 }
 
+/// https://github.com/atom0s/XiEvents/blob/main/OpCodes/0x00B3.md
+///   - Potential lengths: 2, 4, 14, 18
 pub fn determine_opcode_0xb3_size(
     opcode: u8,
     data: &[u8],
@@ -732,6 +871,36 @@ pub fn determine_opcode_0xb3_size(
     }
 }
 
+/// https://github.com/atom0s/XiEvents/blob/main/OpCodes/0x00B4.md
+///   - Potential lengths: 2, 3, 4, 6, 12, 20
+pub fn determine_opcode_0xb4_size(
+    opcode: u8,
+    data: &[u8],
+    _prev_opcodes: &[EventOpcode],
+) -> Option<usize> {
+    if opcode != 0xB4 || data.len() < 2 {
+        return None;
+    }
+
+    match data[0] {
+        0x00 | 0x13 => Some(20),
+        0x01 | 0x02 | 0x04 | 0x0F | 0x10 | 0x11 | 0x12 => Some(6),
+        0x03 | 0x08 | 0x0B | 0x0D | 0x0E | 0x15 => Some(2),
+        0x05 | 0x06 => Some(3),
+        0x07 | 0x09 | 0x0A | 0x0C => Some(4),
+        0x14 => Some(12),
+        _ => {
+            eprintln!(
+                "Unexpected first byte for opcode 0xB4: value = 0x{:02X}",
+                data[0]
+            );
+            None
+        }
+    }
+}
+
+/// https://github.com/atom0s/XiEvents/blob/main/OpCodes/0x00B6.md
+///   - Potential lengths: 2, 4, 6, 14, 16, 20
 pub fn determine_opcode_0xb6_size(
     opcode: u8,
     data: &[u8],
@@ -747,11 +916,41 @@ pub fn determine_opcode_0xb6_size(
         0x0E => Some(16),
         0x10 | 0x12 | 0x13 => Some(2),
         0x14 | 0x15 => Some(6),
-        _ => None,
+        _ => {
+            eprintln!(
+                "Unexpected first byte for opcode 0xB6: value = 0x{:02X}",
+                data[0]
+            );
+            None
+        }
     }
 }
 
-/// Example callback for 0xBF:
+/// https://github.com/atom0s/XiEvents/blob/main/OpCodes/0x00B7.md
+///   - Potential lengths: 8 or 10
+pub fn determine_opcode_0xb7_size(
+    opcode: u8,
+    data: &[u8],
+    _previous_opcodes: &[EventOpcode],
+) -> Option<usize> {
+    if opcode != 0xB7 || data.is_empty() {
+        return None;
+    }
+
+    match data[0] {
+        0x00 => Some(10),
+        0x01 | 0x02 | 0x03 | 0x04 => Some(8),
+        _ => {
+            eprintln!(
+                "Unexpected first byte for opcode 0xB7: value = 0x{:02X}",
+                data[0]
+            );
+            None
+        }
+    }
+}
+
+/// https://github.com/atom0s/XiEvents/blob/main/OpCodes/0x00BF.md
 ///   - Potential lengths: 8 or 10
 pub fn determine_opcode_0xbf_size(
     opcode: u8,
@@ -764,10 +963,36 @@ pub fn determine_opcode_0xbf_size(
 
     match data[0] {
         0x00 | 0x60 => Some(8),
-        _ => Some(10),
+        0x20 | 0x40 => Some(10),
+        _ => {
+            eprintln!(
+                "Unexpected first byte for opcode 0xBF: value = 0x{:02X}",
+                data[0]
+            );
+            None
+        }
     }
 }
 
+/// https://github.com/atom0s/XiEvents/blob/main/OpCodes/0x00C2.md
+///   - Potential lengths: 2, 4, 6
+pub fn determine_opcode_0xc2_size(
+    opcode: u8,
+    data: &[u8],
+    _prev_opcodes: &[EventOpcode],
+) -> Option<usize> {
+    if opcode != 0xC2 || data.is_empty() {
+        return None;
+    }
+    match data[0] {
+        0x01 => Some(4),
+        0x02 => Some(6),
+        _ => Some(2)
+    }
+}
+
+/// https://github.com/atom0s/XiEvents/blob/main/OpCodes/0x00CC.md
+///   - Potential lengths: 4, 6, 10, 14
 pub fn determine_opcode_0xcc_size(
     opcode: u8,
     data: &[u8],
@@ -781,11 +1006,17 @@ pub fn determine_opcode_0xcc_size(
         0x02 => Some(14),
         0x10 => Some(6),
         0x11 | 0x20 => Some(4),
-        _ => None,
+        _ => {
+            eprintln!(
+                "Unexpected first byte for opcode 0xCC: value = 0x{:02X}",
+                data[0]
+            );
+            None
+        }
     }
 }
 
-/// Example callback for 0xD4:
+/// https://github.com/atom0s/XiEvents/blob/main/OpCodes/0x00D4.md
 ///   - Potential lengths: 2, 6, 8, 12
 pub fn determine_opcode_0xd4_size(
     opcode: u8,
@@ -797,14 +1028,22 @@ pub fn determine_opcode_0xd4_size(
     }
 
     match data[0] {
-        // 0x00 | 0x02 => Some(2),
-        // 0x01 => Some(8),
-        // 0x03 => Some(6),
-        // 0x04 | 0x05 => Some(12),
-        _ => None,
+        0x00 | 0x02 => Some(2),
+        0x01 => Some(8),
+        0x03 => Some(6),
+        0x04 | 0x05 => Some(12),
+        _ => {
+            eprintln!(
+                "Unexpected first byte for opcode 0xD4: value = 0x{:02X}",
+                data[0]
+            );
+            None
+        }
     }
 }
 
+/// https://github.com/atom0s/XiEvents/blob/main/OpCodes/0x00D8.md
+///   - Potential lengths: 6, 8, 12
 pub fn determine_opcode_0xd8_size(
     opcode: u8,
     data: &[u8],
@@ -815,9 +1054,9 @@ pub fn determine_opcode_0xd8_size(
     }
 
     match data[0] {
-        0 => Some(6),
-        1 | 2 | 3 => Some(8),
-        4 => Some(12),
+        0x00 => Some(6),
+        0x01 | 0x02 | 0x03 => Some(8),
+        0x04 => Some(12),
         _ => Some(6),
     }
 }
