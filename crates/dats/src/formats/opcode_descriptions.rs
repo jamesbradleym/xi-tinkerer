@@ -1,4 +1,13 @@
-use super::event::{EventOpcode, OpcodeSizeCallback};
+/// Represents an individual opcode within an event series.
+/// Used by OpcodeSizeCallback for dynamic size determination.
+#[derive(Debug, Clone)]
+pub struct EventOpcode {
+    pub opcode: u8,
+    pub params: Vec<u8>,
+}
+
+/// Callback type for determining opcode parameter size dynamically.
+pub type OpcodeSizeCallback = fn(opcode: u8, data: &[u8], previous_opcodes: &[EventOpcode]) -> Option<usize>;
 
 pub const DESCRIPTIONS: [(u8, &str, &'static [usize], Option<OpcodeSizeCallback>); 218] =
 [
