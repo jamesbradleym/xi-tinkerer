@@ -68,8 +68,8 @@ fn main() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .plugin(tauri_plugin_dialog::init())
-        .invoke_handler(specta_builder.invoke_handler())
         .invoke_handler(tauri::generate_handler![
+            commands::dummy_event_type_gen,
             commands::select_ffxi_folder,
             commands::select_project_folder,
             commands::load_persistence_data,

@@ -9,7 +9,9 @@ use std::{
 use anyhow::Result;
 use dats::{
     formats::zone_data::zone_model::ZoneMesh,
-    {base::ZoneId, context::DatContext, id_mapping::DatWithLang},
+    base::ZoneId,
+    context::DatContext,
+    id_mapping::DatWithLang,
 };
 use notify::{Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use parking_lot::RwLock;

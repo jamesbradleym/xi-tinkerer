@@ -274,6 +274,19 @@ pub struct MonipulatorData {
 }
 
 impl ItemInfo {
+    pub fn id(&self) -> u32 {
+        self.id
+    }
+
+    pub fn log_name(&self) -> Option<String> {
+        match &self.strings {
+            Some(ItemStrings::Name { name }) => Some(name.clone()),
+            Some(ItemStrings::English { name, .. }) => Some(name.clone()),
+            Some(ItemStrings::Japanese { name, .. }) => Some(name.clone()),
+            None => None,
+        }
+    }
+
     pub fn parse<T: ByteWalker>(walker: &mut T) -> Result<ItemInfo> {
         let mut item_bytes = walker.take_bytes(ENTRY_SIZE)?.to_vec();
         rotate_all(&mut item_bytes, 5);
@@ -612,12 +625,22 @@ impl ItemInfo {
 
 #[derive(Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct ItemInfoTable {
-    items: Vec<ItemInfo>,
+    pub items: Vec<ItemInfo>,
 }
 
 const ENTRY_SIZE: usize = 0xC00;
 
 impl ItemInfoTable {
+    pub fn id_to_name_map(&self) -> std::collections::HashMap<u32, String> {
+        let mut map = std::collections::HashMap::new();
+        for item in &self.items {
+            if let Some(name) = item.log_name() {
+                map.insert(item.id(), name);
+            }
+        }
+        map
+    }
+
     pub fn parse<T: ByteWalker>(walker: &mut T) -> Result<Self> {
         if walker.len() % ENTRY_SIZE != 0 {
             return Err(anyhow!(

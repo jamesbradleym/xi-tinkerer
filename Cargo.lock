@@ -3239,6 +3239,8 @@ dependencies = [
  "anyhow",
  "dats",
  "gltf",
+ "once_cell",
+ "regex",
  "serde",
  "serde_yaml",
  "specta",

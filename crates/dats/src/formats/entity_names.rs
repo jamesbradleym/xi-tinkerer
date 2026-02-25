@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     fs::File,
     io::{Read, Seek, SeekFrom},
     path::PathBuf,
@@ -48,6 +49,10 @@ pub fn get_entity_names_zone(path: &PathBuf) -> Option<u16> {
 }
 
 impl EntityNames {
+    pub fn id_to_name_map(&self) -> HashMap<u32, String> {
+        self.names.iter().map(|e| (e.id, e.name.clone())).collect()
+    }
+
     pub fn parse<T: ByteWalker>(walker: &mut T) -> Result<EntityNames> {
         walker.expect_utf8_str("none")?;
 

@@ -6,7 +6,7 @@ use std::{
 
 use anyhow::{Result, anyhow};
 use dats::base::ZoneId;
-use dats::id_mapping::{DatDescriptor, DatLanguage, DatWithLang};
+use dats::id_mapping::{DatDescriptor, DatIdMapping, DatLanguage, DatWithLang};
 use processor::{
     dat_yaml_util::DatYamlUtil,
     processor::{DatProcessorMessage, ZoneWavefrontKind},
@@ -374,13 +374,39 @@ pub async fn make_yaml(
         .clone();
 
     let processor = state.read().processor.clone();
+    let raw_data_root = project_path.join(RAW_DATA_DIR);
+    let lang = lang.unwrap_or(DatLanguage::English);
 
     processor.dat_to_yaml(
         dat_descriptor,
-        lang.unwrap_or(DatLanguage::English),
-        dat_context,
-        project_path.join(RAW_DATA_DIR),
+        lang,
+        dat_context.clone(),
+        raw_data_root.clone(),
     );
+
+    // Bundled export: when exporting Events for a zone, also export Dialog, Dialog2 (if exists), and EntityNames
+    if let DatDescriptor::Events(zone_id) = dat_descriptor {
+        processor.dat_to_yaml(
+            DatDescriptor::Dialog(zone_id),
+            lang,
+            dat_context.clone(),
+            raw_data_root.clone(),
+        );
+        if DatIdMapping::get().dialog2.get_result(&zone_id).is_ok() {
+            processor.dat_to_yaml(
+                DatDescriptor::Dialog2(zone_id),
+                lang,
+                dat_context.clone(),
+                raw_data_root.clone(),
+            );
+        }
+        processor.dat_to_yaml(
+            DatDescriptor::EntityNames(zone_id),
+            lang,
+            dat_context.clone(),
+            raw_data_root.clone(),
+        );
+    }
 
     Ok(())
 }

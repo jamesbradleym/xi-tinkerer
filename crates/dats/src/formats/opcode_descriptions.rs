@@ -698,7 +698,7 @@ pub fn determine_opcode_0x9d_size(
             }
 
             // Read 'val1' from offset 6..7 and 'val2' from offset 2..3
-            let val1 = u16::from_le_bytes([data[6], data[7]]);
+            let _val1 = u16::from_le_bytes([data[6], data[7]]);
             let val2 = u16::from_le_bytes([data[2], data[3]]);
 
             if val2 < 64 {//} && PTR_Ptr_Work_Zone[val2 as usize].is_some() {
